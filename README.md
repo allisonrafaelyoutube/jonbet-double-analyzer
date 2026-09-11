@@ -21,9 +21,24 @@ Dashboard: http://127.0.0.1:8787
 
 Extensão: carregar a pasta `extension/` no Brave (`brave://extensions`).
 
-## Cloud
+## Cloud (já provisionado)
 
-Veja [docs/DEPLOY-CLOUD.md](docs/DEPLOY-CLOUD.md).
+| Peça | URL |
+|------|-----|
+| Dashboard (Render) | https://jonbet-double-analyzer.onrender.com |
+| Dashboard (Netlify)* | https://jonbet-double-analyzer.netlify.app |
+| API health | https://jonbet-double-analyzer.onrender.com/health |
+| Repo | https://github.com/allisonrafaelyoutube/jonbet-double-analyzer |
+| Supabase | projeto `Analyze` (`aclulovomzyrvyeittxt`) |
+
+\*Se o Netlify pedir login do time, desative **Team / Edge Access** nas configs do site, ou use o dashboard do Render.
+
+### Importante (HTTP 451)
+
+A API da Jonbet **bloqueia IP de datacenter** (Render retorna `HTTP 451`). O poller na nuvem sozinho não puxa giros novos.
+Com a **extensão Brave** (ou o PC) aberta no Double, os giros sobem para o Render → Supabase e o painel atualiza.
+
+Veja também [docs/DEPLOY-CLOUD.md](docs/DEPLOY-CLOUD.md).
 
 ## Estrutura
 
