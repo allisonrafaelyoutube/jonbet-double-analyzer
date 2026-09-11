@@ -9,17 +9,31 @@ Analisador local/cloud do jogo Double (Jonbet) para uso pessoal.
 
 > Não é previsão mágica. Double tem vantagem da casa. Os “sinais” são lembretes/regras suas.
 
-## Local (PC)
+## Local (PC) + histórico no Supabase
+
+1. Gere o `.env` (uma vez):
+
+```bat
+node scripts\write-local-env.js
+```
+
+2. (Opcional) migre o histórico antigo do `store.json`:
 
 ```bat
 cd server
-npm install
-npm start
+npm run migrate:supabase
 ```
 
-Dashboard: http://127.0.0.1:8787
+3. Suba o servidor:
 
-Extensão: carregar a pasta `extension/` no Brave (`brave://extensions`).
+```bat
+start-server.bat
+```
+
+Dashboard: http://127.0.0.1:8787  
+Com `.env` preenchido, os giros novos vão para o **Supabase** (não incham o disco).
+
+Extensão: carregar `extension/` no Brave e deixar o Double aberto.
 
 ## Cloud (já provisionado)
 

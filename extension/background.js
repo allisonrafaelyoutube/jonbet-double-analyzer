@@ -1,14 +1,15 @@
 const CLOUD_SERVER = "https://jonbet-double-analyzer.onrender.com";
 const LOCAL_SERVER = "http://127.0.0.1:8787";
-let SERVER = CLOUD_SERVER;
+// Preferência: local primeiro (modo PC + Supabase)
+let SERVER = LOCAL_SERVER;
 
 const JONBET_API =
   "https://jonbet.bet.br/api/singleplayer-originals/originals/roulette_games/recent/1";
 
 async function pickServer() {
-  for (const base of [CLOUD_SERVER, LOCAL_SERVER]) {
+  for (const base of [LOCAL_SERVER, CLOUD_SERVER]) {
     try {
-      const r = await fetch(`${base}/health`, { signal: AbortSignal.timeout(5000) });
+      const r = await fetch(`${base}/health`, { signal: AbortSignal.timeout(4000) });
       if (r.ok) {
         SERVER = base;
         return base;
@@ -17,7 +18,7 @@ async function pickServer() {
       /* next */
     }
   }
-  SERVER = CLOUD_SERVER;
+  SERVER = LOCAL_SERVER;
   return SERVER;
 }
 

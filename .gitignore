@@ -4,6 +4,7 @@ server/node_modules/
 
 # Local runtime data / secrets
 server/data/
+server/.env
 .env
 .env.*
 !.env.example
