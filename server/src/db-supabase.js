@@ -1,5 +1,14 @@
 const { createClient } = require("@supabase/supabase-js");
 
+// Node 20 on Render has no global WebSocket; supabase-js needs `ws`
+try {
+  // eslint-disable-next-line global-require
+  const WS = require("ws");
+  if (!global.WebSocket) global.WebSocket = WS;
+} catch {
+  /* ignore */
+}
+
 const url = process.env.SUPABASE_URL;
 const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
 

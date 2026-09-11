@@ -1,9 +1,29 @@
-const SERVER = "http://127.0.0.1:8787";
+const CLOUD_SERVER = "https://jonbet-double-analyzer.onrender.com";
+const LOCAL_SERVER = "http://127.0.0.1:8787";
+let SERVER = CLOUD_SERVER;
+
 const JONBET_API =
   "https://jonbet.bet.br/api/singleplayer-originals/originals/roulette_games/recent/1";
 
+async function pickServer() {
+  for (const base of [CLOUD_SERVER, LOCAL_SERVER]) {
+    try {
+      const r = await fetch(`${base}/health`, { signal: AbortSignal.timeout(5000) });
+      if (r.ok) {
+        SERVER = base;
+        return base;
+      }
+    } catch {
+      /* next */
+    }
+  }
+  SERVER = CLOUD_SERVER;
+  return SERVER;
+}
+
 async function checkServer() {
   try {
+    await pickServer();
     const r = await fetch(`${SERVER}/health`);
     const data = await r.json();
     await chrome.storage.local.set({
@@ -13,6 +33,7 @@ async function checkServer() {
       lastError: null,
       apiOk: !!data.apiOk,
       apiAgeSec: data.apiAgeSec,
+      serverUrl: SERVER,
     });
     return { ok: true, data };
   } catch (err) {
@@ -37,6 +58,7 @@ async function pollJonbetApi() {
     const games = await r.json();
     if (!Array.isArray(games) || !games.length) return;
 
+    await pickServer();
     const res = await fetch(`${SERVER}/events`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -55,9 +77,9 @@ async function pollJonbetApi() {
       lastSource: "bg-api",
       lastError: null,
       serverOk: true,
+      serverUrl: SERVER,
     });
   } catch (err) {
-    // silencioso — o poller do servidor também tenta
     await chrome.storage.local.set({
       lastBgApiError: String(err && err.message ? err.message : err),
     });
@@ -94,11 +116,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return false;
   }
 
-  fetch(`${SERVER}/events`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  })
+  pickServer()
+    .then(() =>
+      fetch(`${SERVER}/events`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+    )
     .then(async (r) => {
       const data = await r.json().catch(() => ({}));
       await chrome.storage.local.set({
@@ -107,6 +132,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         lastInserted: data.inserted || 0,
         serverOk: true,
         lastSource: payload.source || "unknown",
+        serverUrl: SERVER,
       });
       sendResponse({ ok: r.ok, data });
     })
@@ -134,7 +160,6 @@ chrome.runtime.onStartup.addListener(() => {
 checkServer();
 pollJonbetApi();
 
-// Alarmes curtos (dev/unpacked) + fallback por tick do service worker
 chrome.alarms.create("health", { periodInMinutes: 0.5 });
 chrome.alarms.create("api-sync", { periodInMinutes: 0.05 });
 chrome.alarms.onAlarm.addListener((alarm) => {
