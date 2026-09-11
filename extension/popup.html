@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <style>
+    body {
+      margin: 0;
+      width: 300px;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: #12161d;
+      color: #e8eaed;
+      padding: 14px;
+    }
+    h1 { font-size: 13px; margin: 0 0 10px; }
+    .row { font-size: 12px; color: #9aa3af; margin: 6px 0; }
+    .ok { color: #3ddc97; }
+    .bad { color: #ff6b6b; }
+    a, button {
+      display: inline-block;
+      margin-top: 10px;
+      margin-right: 8px;
+      background: #3ddc97;
+      color: #042015;
+      border: 0;
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-weight: 700;
+      text-decoration: none;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    button.secondary {
+      background: transparent;
+      color: #e8eaed;
+      border: 1px solid #2a313c;
+    }
+  </style>
+</head>
+<body>
+  <h1>Jonbet Double Analyzer</h1>
+  <div class="row" id="server">Servidor: checando…</div>
+  <div class="row" id="page">Página: …</div>
+  <div class="row" id="ping">Último envio: …</div>
+  <div class="row" id="err"></div>
+  <a href="http://127.0.0.1:8787/" target="_blank" rel="noreferrer">Abrir dashboard</a>
+  <button class="secondary" id="recheck" type="button">Rechecar</button>
+  <script src="popup.js"></script>
+</body>
+</html>

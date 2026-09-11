@@ -1,0 +1,58 @@
+{
+  "manifest_version": 3,
+  "name": "Jonbet Double Analyzer",
+  "version": "1.0.4",
+  "description": "Captura WebSocket/histórico do Double e envia para o analisador local.",
+  "permissions": ["storage", "alarms"],
+  "host_permissions": [
+    "*://*.jonbet.bet.br/*",
+    "*://jonbet.bet.br/*",
+    "*://*.jonbet.com/*",
+    "*://jonbet.com/*",
+    "http://127.0.0.1:8787/*",
+    "http://localhost:8787/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Jonbet Double Analyzer",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.jonbet.bet.br/*",
+        "*://jonbet.bet.br/*",
+        "*://*.jonbet.com/*",
+        "*://jonbet.com/*"
+      ],
+      "js": ["injected.js"],
+      "run_at": "document_start",
+      "all_frames": true,
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "*://*.jonbet.bet.br/*",
+        "*://jonbet.bet.br/*",
+        "*://*.jonbet.com/*",
+        "*://jonbet.com/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_start",
+      "all_frames": true
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["injected.js"],
+      "matches": [
+        "*://*.jonbet.bet.br/*",
+        "*://jonbet.bet.br/*",
+        "*://*.jonbet.com/*",
+        "*://jonbet.com/*"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "name": "jonbet-double-analyzer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Analisador local do Jonbet Double (WS + dashboard + alertas)",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@msgpack/msgpack": "^3.1.3",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "node-notifier": "^10.0.1"
+  }
+}

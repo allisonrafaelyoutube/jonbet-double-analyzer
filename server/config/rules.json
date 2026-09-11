@@ -1,0 +1,5 @@
+{
+  "whiteGap": { "enabled": true, "threshold": 15 },
+  "sameColorStreak": { "enabled": true, "threshold": 5 },
+  "cooldownSeconds": 60
+}

@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Jonbet Double Analyzer</title>
+  <style>
+    :root {
+      --bg: #0e1116;
+      --panel: #171b22;
+      --text: #e8eaed;
+      --muted: #9aa3af;
+      --green: #00c74d;
+      --black: #2b3340;
+      --white: #f3f5f7;
+      --accent: #3ddc97;
+      --danger: #ff6b6b;
+      --line: #2a313c;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: radial-gradient(1200px 600px at 10% -10%, #1a2433, var(--bg));
+      color: var(--text);
+      min-height: 100vh;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      padding: 20px 28px;
+      border-bottom: 1px solid var(--line);
+    }
+    h1 { margin: 0; font-size: 18px; letter-spacing: 0.02em; }
+    .status { color: var(--muted); font-size: 13px; text-align: right; }
+    .status.ok { color: var(--accent); }
+    .status.bad { color: var(--danger); }
+    main {
+      display: grid;
+      grid-template-columns: 1.4fr 1fr;
+      gap: 16px;
+      padding: 20px 28px 40px;
+    }
+    @media (max-width: 980px) { main { grid-template-columns: 1fr; } }
+    .card {
+      background: color-mix(in srgb, var(--panel) 92%, black);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px;
+    }
+    .card h2 {
+      margin: 0 0 12px;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .strip {
+      display: flex;
+      flex-wrap: nowrap;
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 6px;
+      min-height: 72px;
+    }
+    .chip-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      flex: 0 0 auto;
+    }
+    .chip-wrap .idx {
+      font-size: 10px;
+      color: var(--muted);
+    }
+    .chip {
+      width: 40px;
+      height: 40px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      font-size: 13px;
+      font-weight: 700;
+      color: #fff;
+    }
+    .chip.green { background: var(--green); }
+    .chip.black { background: var(--black); border: 1px solid #4a5568; }
+    .chip.white { background: var(--white); color: #111; }
+    .chip-wrap.newest .chip {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+    .timeline {
+      margin-top: 14px;
+      display: grid;
+      gap: 6px;
+      max-height: 280px;
+      overflow: auto;
+    }
+    .t-row {
+      display: grid;
+      grid-template-columns: 56px 52px 1fr 70px;
+      gap: 8px;
+      align-items: center;
+      font-size: 13px;
+      padding: 8px 10px;
+      background: #12161d;
+      border-radius: 8px;
+    }
+    .t-row .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 6px;
+      vertical-align: middle;
+    }
+    .dot.green { background: var(--green); }
+    .dot.black { background: #8b95a5; }
+    .dot.white { background: var(--white); border: 1px solid #999; }
+    .muted { color: var(--muted); }
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+    .metric {
+      background: #12161d;
+      border-radius: 10px;
+      padding: 12px;
+    }
+    .metric b { display: block; font-size: 22px; margin-top: 4px; }
+    .metric span { color: var(--muted); font-size: 12px; }
+    label {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin: 10px 0;
+      font-size: 14px;
+    }
+    input[type="number"] {
+      width: 72px;
+      background: #0f1319;
+      border: 1px solid var(--line);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 8px;
+    }
+    button {
+      background: var(--accent);
+      color: #042015;
+      border: 0;
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    button.secondary {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--line);
+    }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+    pre {
+      max-height: 220px;
+      overflow: auto;
+      background: #0b0e13;
+      border-radius: 10px;
+      padding: 10px;
+      font-size: 11px;
+      color: #b7c0cc;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .note { color: var(--muted); font-size: 12px; line-height: 1.5; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Jonbet Double Analyzer</h1>
+    <div id="health" class="status">conectando…</div>
+  </header>
+  <main>
+    <section class="card">
+      <h2>Giros recentes</h2>
+      <p class="note" style="margin-top:0">Ordem: <b style="color:#e8eaed">mais novo → mais antigo</b> (esquerda → direita). Cores: verde 1–7 · preto 8–14 · branco 0.</p>
+      <div id="strip" class="strip"></div>
+      <div id="timeline" class="timeline"></div>
+      <div class="metrics" style="margin-top:16px">
+        <div class="metric"><span>Total salvo</span><b id="m-total">0</b></div>
+        <div class="metric"><span>Gap branco</span><b id="m-gap">0</b></div>
+        <div class="metric"><span>Sequência</span><b id="m-streak">—</b></div>
+      </div>
+      <div class="metrics" style="margin-top:10px">
+        <div class="metric"><span>Verde</span><b id="m-g">0</b></div>
+        <div class="metric"><span>Preto</span><b id="m-b">0</b></div>
+        <div class="metric"><span>Branco</span><b id="m-w">0</b></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Regras de alerta</h2>
+      <label>
+        <span><input type="checkbox" id="r-white-on" /> Gap sem branco ≥</span>
+        <input type="number" id="r-white-n" min="1" max="200" />
+      </label>
+      <label>
+        <span><input type="checkbox" id="r-streak-on" /> Mesma cor (sem branco) ≥</span>
+        <input type="number" id="r-streak-n" min="2" max="50" />
+      </label>
+      <label>
+        <span>Cooldownoldown (segundos)</span>
+        <input type="number" id="r-cd" min="5" max="600" />
+      </label>
+      <div class="row">
+        <button id="save-rules">Salvar regras</button>
+        <button class="secondary" id="refresh">Atualizar</button>
+        <button class="secondary" id="reset">Limpar histórico</button>
+      </div>
+      <p class="note">Sync triplo: poller do servidor (retry) + extensão na página + background. Falhas pontuais não derrubam a leitura.</p>
+    </section>
+
+    <section class="card" style="grid-column: 1 / -1">
+      <h2>Raw / debug</h2>
+      <pre id="raw">carregando…</pre>
+    </section>
+  </main>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const colorLabel = { green: "Verde", black: "Preto", white: "Branco" };
+
+    function fmtTime(iso) {
+      if (!iso) return "—";
+      const d = new Date(iso);
+      return d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    }
+
+    function chip(spin, index) {
+      const wrap = document.createElement("div");
+      wrap.className = "chip-wrap" + (index === 0 ? " newest" : "");
+      wrap.title = `${colorLabel[spin.color] || spin.color} #${spin.number} · ${fmtTime(spin.rolledAt)} · ${spin.source || ""}`;
+      const d = document.createElement("div");
+      d.className = `chip ${spin.color}`;
+      d.textContent = spin.number;
+      const idx = document.createElement("div");
+      idx.className = "idx";
+      idx.textContent = index === 0 ? "agora" : `-${index}`;
+      wrap.appendChild(d);
+      wrap.appendChild(idx);
+      return wrap;
+    }
+
+    function row(spin, index) {
+      const el = document.createElement("div");
+      el.className = "t-row";
+      el.innerHTML = `
+        <span class="muted">${index === 0 ? "agora" : "#" + (index + 1)}</span>
+        <span><span class="dot ${spin.color}"></span><b>${spin.number}</b></span>
+        <span>${colorLabel[spin.color] || spin.color}</span>
+        <span class="muted">${fmtTime(spin.rolledAt)}</span>
+      `;
+      return el;
+    }
+
+    async function loadRulesIntoForm() {
+      const rules = await fetch("/api/rules").then((r) => r.json());
+      $("r-white-on").checked = !!rules.whiteGap?.enabled;
+      $("r-white-n").value = rules.whiteGap?.threshold ?? 15;
+      $("r-streak-on").checked = !!rules.sameColorStreak?.enabled;
+      $("r-streak-n").value = rules.sameColorStreak?.threshold ?? 5;
+      $("r-cd").value = rules.cooldownSeconds ?? 60;
+    }
+
+    async function refresh() {
+      const [health, stats, spins, raw] = await Promise.all([
+        fetch("/health").then((r) => r.json()),
+        fetch("/api/stats").then((r) => r.json()),
+        fetch("/api/spins?limit=40").then((r) => r.json()),
+        fetch("/api/raw?limit=12").then((r) => r.json()),
+      ]);
+
+      const apiAge = health.apiAgeSec != null ? health.apiAgeSec : Infinity;
+      const el = $("health");
+      if (health.apiOk && apiAge < 45) {
+        el.textContent = `sync ok · há ${apiAge}s · ${health.spins} giros`;
+        el.className = "status ok";
+      } else if (apiAge < 90) {
+        el.textContent = `reconectando… · último sync há ${apiAge}s · ${health.spins} giros`;
+        el.className = "status";
+      } else {
+        el.textContent = `sync atrasado · ${health.spins} giros (servidor continua tentando)`;
+        el.className = "status bad";
+      }
+
+      const m = stats.metrics;
+      $("m-total").textContent = m.total;
+      $("m-gap").textContent = m.whiteGap;
+      $("m-streak").textContent = m.streakColor ? `${m.streak}× ${colorLabel[m.streakColor] || m.streakColor}` : "—";
+      $("m-g").textContent = m.counts.green;
+      $("m-b").textContent = m.counts.black;
+      $("m-w").textContent = m.counts.white;
+
+      const list = spins.data || [];
+      const strip = $("strip");
+      strip.innerHTML = "";
+      list.forEach((s, i) => strip.appendChild(chip(s, i)));
+
+      const timeline = $("timeline");
+      timeline.innerHTML = "";
+      list.slice(0, 20).forEach((s, i) => timeline.appendChild(row(s, i)));
+
+      $("raw").textContent = (raw.data || [])
+        .map((e) => `#${e.id} ${e.receivedAt}\n${String(e.payload).slice(0, 800)}`)
+        .join("\n\n---\n\n") || "(sem raw — giros vêm da API oficial)";
+    }
+
+    $("save-rules").onclick = async () => {
+      await fetch("/api/rules", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          whiteGap: { enabled: $("r-white-on").checked, threshold: Number($("r-white-n").value) },
+          sameColorStreak: { enabled: $("r-streak-on").checked, threshold: Number($("r-streak-n").value) },
+          cooldownSeconds: Number($("r-cd").value),
+        }),
+      });
+      await refresh();
+    };
+
+    $("reset").onclick = async () => {
+      if (!confirm("Limpar histórico local de giros?")) return;
+      await fetch("/api/reset", { method: "POST" });
+      await refresh();
+    };
+
+    $("refresh").onclick = refresh;
+    loadRulesIntoForm().then(refresh);
+    setInterval(refresh, 2500);
+  </script>
+</body>
+</html>
