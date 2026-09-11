@@ -141,12 +141,22 @@
         color: r.color,
         number: r.number,
         rolledAt: r.rolled_at,
+        receivedAt: r.received_at,
         source: r.source,
       }));
 
-      el.textContent = `supabase ok · ${count ?? spins.length} giros`;
-      el.className = "status ok";
-
+      const newestIso = spins[0]?.receivedAt || spins[0]?.rolledAt;
+      const ageSec = newestIso ? Math.round((Date.now() - new Date(newestIso).getTime()) / 1000) : null;
+      if (ageSec != null && ageSec < 120) {
+        el.textContent = `sync ok · há ${ageSec}s · ${count ?? spins.length} giros`;
+        el.className = "status ok";
+      } else if (ageSec != null && ageSec < 180) {
+        el.textContent = `aguardando próximo giro · há ${ageSec}s · ${count ?? spins.length} giros`;
+        el.className = "status";
+      } else {
+        el.textContent = `sem dados novos · ${count ?? 0} giros — abra Double + extensão`;
+        el.className = "status bad";
+      }
       const m = metrics(spins);
       $("m-total").textContent = count ?? m.total;
       $("m-gap").textContent = m.whiteGap;

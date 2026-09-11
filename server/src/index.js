@@ -17,31 +17,56 @@ function touchHeartbeat() {
   db.setMeta("last_extension_at", new Date().toISOString());
 }
 
-function apiStatus() {
+async function apiStatus() {
+  // Fonte de verdade: último giro gravado (extensão ou poller)
+  let newestReceivedAt = null;
+  try {
+    const recent = await db.recentSpins(1);
+    if (recent[0]?.receivedAt) newestReceivedAt = recent[0].receivedAt;
+    else if (recent[0]?.rolledAt) newestReceivedAt = recent[0].rolledAt;
+  } catch {
+    /* ignore */
+  }
+
   const lastApiAt = db.getMeta("last_api_at");
+  const lastExtAt = db.getMeta("last_extension_at");
   const failStreak = Number(db.getMeta("api_fail_streak") || 0);
-  const ageMs = lastApiAt ? Date.now() - Date.parse(lastApiAt) : Infinity;
-  const fresh = ageMs < 45000;
+  const cloudBlocked = db.getMeta("cloud_poll_blocked") === "1";
+
+  const ages = [];
+  for (const iso of [newestReceivedAt, lastApiAt, lastExtAt]) {
+    if (!iso) continue;
+    const ms = Date.now() - Date.parse(iso);
+    if (Number.isFinite(ms) && ms >= 0) ages.push(ms);
+  }
+  const ageMs = ages.length ? Math.min(...ages) : Infinity;
+  // Double ~30s/rodada — toleramos até 2 min sem dado novo
+  const fresh = ageMs < 120000;
   const okFlag = db.getMeta("last_api_ok") === "1";
+
   return {
-    lastApiAt,
-    apiOk: fresh || (okFlag && failStreak < 3),
+    lastApiAt: lastApiAt || newestReceivedAt,
+    lastDataAt: newestReceivedAt,
+    lastExtensionAt: lastExtAt,
+    apiOk: fresh || (okFlag && failStreak < 5) || (cloudBlocked && fresh),
     apiFresh: fresh,
     apiAgeSec: Number.isFinite(ageMs) ? Math.round(ageMs / 1000) : null,
     apiFailStreak: failStreak,
     lastApiError: db.getMeta("last_api_error") || null,
     lastApiUrl: db.getMeta("last_api_url") || null,
+    cloudPollBlocked: cloudBlocked,
     storage: db.isSupabase ? "supabase" : "local-json",
   };
 }
 
 app.get("/health", async (_req, res) => {
+  const status = await apiStatus();
   res.json({
     ok: true,
     spins: await db.spinCount(),
-    lastExtensionAt: db.getMeta("last_extension_at"),
+    lastExtensionAt: status.lastExtensionAt || db.getMeta("last_extension_at"),
     now: new Date().toISOString(),
-    ...apiStatus(),
+    ...status,
   });
 });
 
@@ -68,6 +93,8 @@ app.post("/events", async (req, res) => {
     db.setMeta("last_api_ok", "1");
     db.setMeta("api_fail_streak", "0");
     db.setMeta("last_api_error", "");
+    // sync via extensão é o caminho válido na nuvem
+    db.setMeta("last_extension_sync_at", new Date().toISOString());
   }
 
   if (body.spin) {
@@ -141,11 +168,11 @@ app.get("/api/spins", async (req, res) => {
 app.get("/api/stats", async (_req, res) => {
   const spins = await db.recentSpins(500);
   const metrics = computeMetrics(spins);
+  const status = await apiStatus();
   res.json({
     metrics,
     rules: loadRules(),
-    lastExtensionAt: db.getMeta("last_extension_at"),
-    ...apiStatus(),
+    ...status,
   });
 });
 

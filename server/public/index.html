@@ -286,14 +286,15 @@
 
       const apiAge = health.apiAgeSec != null ? health.apiAgeSec : Infinity;
       const el = $("health");
-      if (health.apiOk && apiAge < 45) {
-        el.textContent = `sync ok · há ${apiAge}s · ${health.spins} giros`;
+      if (health.apiOk && apiAge < 120) {
+        const via = health.cloudPollBlocked ? "via extensão" : "sync";
+        el.textContent = `${via} ok · há ${apiAge}s · ${health.spins} giros`;
         el.className = "status ok";
-      } else if (apiAge < 90) {
-        el.textContent = `reconectando… · último sync há ${apiAge}s · ${health.spins} giros`;
+      } else if (apiAge < 180) {
+        el.textContent = `aguardando próximo giro · há ${apiAge}s · ${health.spins} giros`;
         el.className = "status";
       } else {
-        el.textContent = `sync atrasado · ${health.spins} giros (servidor continua tentando)`;
+        el.textContent = `sem dados novos · ${health.spins} giros — abra o Double + extensão`;
         el.className = "status bad";
       }
 

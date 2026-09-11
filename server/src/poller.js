@@ -114,13 +114,22 @@ function startPoller(db, { onInsert } = {}) {
   }
 
   function markFail(err) {
+    const msg = String(err && err.message ? err.message : err);
+    // Jonbet bloqueia IP de datacenter (451) — esperado no Render; não envenenar o sync
+    if (/HTTP 451|451/.test(msg)) {
+      db.setMeta("cloud_poll_blocked", "1");
+      db.setMeta("last_api_error", "HTTP 451 (bloqueio datacenter — use a extensão)");
+      // não zera last_api_ok nem dispara fail streak agressivo
+      return { blocked: true };
+    }
     failStreak += 1;
-    lastError = String(err && err.message ? err.message : err);
+    lastError = msg;
     db.setMeta("api_fail_streak", String(failStreak));
     db.setMeta("last_api_error", lastError);
     if (failStreak >= FAIL_STREAK_BEFORE_BAD) {
       db.setMeta("last_api_ok", "0");
     }
+    return { blocked: false };
   }
 
   async function tick() {
@@ -132,12 +141,14 @@ function startPoller(db, { onInsert } = {}) {
     try {
       const { games, url } = await fetchGamesResilient();
       const inserted = await ingestGames(db, games, url, "api");
+      db.setMeta("cloud_poll_blocked", "0");
       markOk(url);
       if (inserted > 0 && typeof onInsert === "function") onInsert(inserted);
       scheduleNext(INTERVAL_MS);
     } catch (err) {
-      markFail(err);
-      const backoff = Math.min(10000, 800 * failStreak);
+      const { blocked } = markFail(err);
+      // 451: tenta de novo bem mais tarde (extensão é a fonte)
+      const backoff = blocked ? 120000 : Math.min(10000, 800 * Math.max(failStreak, 1));
       scheduleNext(backoff);
     } finally {
       busy = false;
