@@ -73,18 +73,17 @@ async function fetchGamesResilient() {
   throw lastErr || new Error("falha ao buscar API");
 }
 
-function ingestGames(db, games, sourceUrl, source = "api") {
+async function ingestGames(db, games, sourceUrl, source = "api") {
   const mapped = [];
   for (const g of games) {
     const spin = mapApiGame(g);
     if (spin) mapped.push(spin);
   }
-  // API newest-first → insert oldest-first for stable unshift order
   mapped.reverse();
   let inserted = 0;
   const receivedAt = new Date().toISOString();
   for (const spin of mapped) {
-    const ok = db.insertSpin({
+    const ok = await db.insertSpin({
       ...spin,
       receivedAt,
       source,
@@ -119,7 +118,6 @@ function startPoller(db, { onInsert } = {}) {
     lastError = String(err && err.message ? err.message : err);
     db.setMeta("api_fail_streak", String(failStreak));
     db.setMeta("last_api_error", lastError);
-    // Só marca offline depois de várias falhas seguidas (evita flicker)
     if (failStreak >= FAIL_STREAK_BEFORE_BAD) {
       db.setMeta("last_api_ok", "0");
     }
@@ -133,13 +131,12 @@ function startPoller(db, { onInsert } = {}) {
     busy = true;
     try {
       const { games, url } = await fetchGamesResilient();
-      const inserted = ingestGames(db, games, url, "api");
+      const inserted = await ingestGames(db, games, url, "api");
       markOk(url);
       if (inserted > 0 && typeof onInsert === "function") onInsert(inserted);
       scheduleNext(INTERVAL_MS);
     } catch (err) {
       markFail(err);
-      // Reconecta mais rápido após falha
       const backoff = Math.min(10000, 800 * failStreak);
       scheduleNext(backoff);
     } finally {
@@ -155,7 +152,6 @@ function startPoller(db, { onInsert } = {}) {
     }, ms);
   }
 
-  // kickoff imediato
   tick().catch(() => {});
 
   return {
@@ -166,7 +162,6 @@ function startPoller(db, { onInsert } = {}) {
     getLastError: () => lastError,
     getFailStreak: () => failStreak,
     getLastOkAt: () => lastOkAt,
-    /** Used by /events when extension posts API snapshots */
     ingestGames,
   };
 }

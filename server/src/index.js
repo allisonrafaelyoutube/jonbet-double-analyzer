@@ -21,7 +21,6 @@ function apiStatus() {
   const lastApiAt = db.getMeta("last_api_at");
   const failStreak = Number(db.getMeta("api_fail_streak") || 0);
   const ageMs = lastApiAt ? Date.now() - Date.parse(lastApiAt) : Infinity;
-  // Considera online se sync recente (<45s), mesmo com falha pontual
   const fresh = ageMs < 45000;
   const okFlag = db.getMeta("last_api_ok") === "1";
   return {
@@ -32,20 +31,21 @@ function apiStatus() {
     apiFailStreak: failStreak,
     lastApiError: db.getMeta("last_api_error") || null,
     lastApiUrl: db.getMeta("last_api_url") || null,
+    storage: db.isSupabase ? "supabase" : "local-json",
   };
 }
 
-app.get("/health", (_req, res) => {
+app.get("/health", async (_req, res) => {
   res.json({
     ok: true,
-    spins: db.spinCount(),
+    spins: await db.spinCount(),
     lastExtensionAt: db.getMeta("last_extension_at"),
     now: new Date().toISOString(),
     ...apiStatus(),
   });
 });
 
-app.post("/events", (req, res) => {
+app.post("/events", async (req, res) => {
   touchHeartbeat();
   const body = req.body || {};
   const receivedAt = body.receivedAt || new Date().toISOString();
@@ -57,9 +57,13 @@ app.post("/events", (req, res) => {
   const alerts = [];
   const candidates = [];
 
-  // Snapshot da API (extensão / background) — caminho paralelo ao poller
   if (Array.isArray(body.games) && body.games.length) {
-    inserted += ingestGames(db, body.games, body.apiUrl || "extension-api", source || "extension-api");
+    inserted += await ingestGames(
+      db,
+      body.games,
+      body.apiUrl || "extension-api",
+      source || "extension-api"
+    );
     db.setMeta("last_api_at", new Date().toISOString());
     db.setMeta("last_api_ok", "1");
     db.setMeta("api_fail_streak", "0");
@@ -87,17 +91,11 @@ app.post("/events", (req, res) => {
     if (saveRaw && spins.length) {
       try {
         const decodedSpins = spins.map((s) => `${s.color}:${s.number}`).join(",");
-        db.insertRaw({
+        await db.insertRaw({
           receivedAt,
           wsUrl,
           payload: `[binary decoded] ${decodedSpins}`,
         });
-      } catch {
-        /* ignore */
-      }
-    } else if (saveRaw && typeof body.raw === "string" && /double\.tick|"roll"/i.test(body.raw)) {
-      try {
-        db.insertRaw({ receivedAt, wsUrl, payload: body.raw });
       } catch {
         /* ignore */
       }
@@ -109,7 +107,7 @@ app.post("/events", (req, res) => {
     if (!n || !n.color || n.number == null) continue;
     const rolledAt = n.rolledAt || receivedAt;
     const roundId = n.roundId || `${rolledAt}|${n.color}|${n.number}`;
-    const ok = db.insertSpin({
+    const ok = await db.insertSpin({
       roundId,
       color: n.color,
       number: n.number,
@@ -122,7 +120,7 @@ app.post("/events", (req, res) => {
   }
 
   if (inserted > 0) {
-    const metrics = computeMetrics(db.recentSpins(200));
+    const metrics = computeMetrics(await db.recentSpins(200));
     const fired = maybeAlert(metrics, loadRules());
     if (fired) alerts.push(fired);
   }
@@ -130,18 +128,18 @@ app.post("/events", (req, res) => {
   res.json({ ok: true, inserted, alerts });
 });
 
-app.post("/api/reset", (_req, res) => {
-  db.reset();
+app.post("/api/reset", async (_req, res) => {
+  await db.reset();
   res.json({ ok: true });
 });
 
-app.get("/api/spins", (req, res) => {
+app.get("/api/spins", async (req, res) => {
   const limit = Math.min(Number(req.query.limit) || 100, 500);
-  res.json({ data: db.recentSpins(limit) });
+  res.json({ data: await db.recentSpins(limit) });
 });
 
-app.get("/api/stats", (_req, res) => {
-  const spins = db.recentSpins(500);
+app.get("/api/stats", async (_req, res) => {
+  const spins = await db.recentSpins(500);
   const metrics = computeMetrics(spins);
   res.json({
     metrics,
@@ -166,21 +164,22 @@ app.put("/api/rules", (req, res) => {
   res.json(next);
 });
 
-app.get("/api/raw", (req, res) => {
+app.get("/api/raw", async (req, res) => {
   const limit = Math.min(Number(req.query.limit) || 50, 200);
-  res.json({ data: db.recentRaw(limit) });
+  res.json({ data: await db.recentRaw(limit) });
 });
 
 startPoller(db, {
-  onInsert: (inserted) => {
+  onInsert: async (inserted) => {
     if (inserted > 0) {
-      const metrics = computeMetrics(db.recentSpins(200));
+      const metrics = computeMetrics(await db.recentSpins(200));
       maybeAlert(metrics, loadRules());
     }
   },
 });
 
-app.listen(PORT, "127.0.0.1", () => {
-  console.log(`Jonbet Double Analyzer → http://127.0.0.1:${PORT}`);
-  console.log("Poller API Double resiliente (retry + fallback + extensão)");
+const host = process.env.HOST || "0.0.0.0";
+app.listen(PORT, host, () => {
+  console.log(`Jonbet Double Analyzer → http://${host}:${PORT}`);
+  console.log(`Storage: ${db.isSupabase ? "supabase" : "local-json"}`);
 });

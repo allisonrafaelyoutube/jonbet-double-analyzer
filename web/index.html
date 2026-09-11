@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Jonbet Double Analyzer</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="./env.js"></script>
+  <style>
+    :root {
+      --bg: #0e1116; --panel: #171b22; --text: #e8eaed; --muted: #9aa3af;
+      --green: #00c74d; --black: #2b3340; --white: #f3f5f7;
+      --accent: #3ddc97; --danger: #ff6b6b; --line: #2a313c;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: "Segoe UI", system-ui, sans-serif;
+      background: radial-gradient(1200px 600px at 10% -10%, #1a2433, var(--bg));
+      color: var(--text); min-height: 100vh;
+    }
+    header {
+      display: flex; justify-content: space-between; align-items: center;
+      gap: 16px; padding: 20px 28px; border-bottom: 1px solid var(--line);
+    }
+    h1 { margin: 0; font-size: 18px; }
+    .status { color: var(--muted); font-size: 13px; text-align: right; }
+    .status.ok { color: var(--accent); }
+    .status.bad { color: var(--danger); }
+    main { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; padding: 20px 28px 40px; }
+    @media (max-width: 980px) { main { grid-template-columns: 1fr; } }
+    .card {
+      background: color-mix(in srgb, var(--panel) 92%, black);
+      border: 1px solid var(--line); border-radius: 14px; padding: 16px;
+    }
+    .card h2 {
+      margin: 0 0 12px; font-size: 13px; text-transform: uppercase;
+      letter-spacing: 0.08em; color: var(--muted); font-weight: 600;
+    }
+    .strip { display: flex; flex-wrap: nowrap; gap: 8px; overflow-x: auto; min-height: 72px; }
+    .chip-wrap { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 0 0 auto; }
+    .chip-wrap .idx { font-size: 10px; color: var(--muted); }
+    .chip {
+      width: 40px; height: 40px; border-radius: 999px; display: grid; place-items: center;
+      font-size: 13px; font-weight: 700; color: #fff;
+    }
+    .chip.green { background: var(--green); }
+    .chip.black { background: var(--black); border: 1px solid #4a5568; }
+    .chip.white { background: var(--white); color: #111; }
+    .chip-wrap.newest .chip { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .timeline { margin-top: 14px; display: grid; gap: 6px; max-height: 320px; overflow: auto; }
+    .t-row {
+      display: grid; grid-template-columns: 56px 52px 1fr 90px; gap: 8px; align-items: center;
+      font-size: 13px; padding: 8px 10px; background: #12161d; border-radius: 8px;
+    }
+    .dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; margin-right: 6px; vertical-align: middle; }
+    .dot.green { background: var(--green); }
+    .dot.black { background: #8b95a5; }
+    .dot.white { background: var(--white); border: 1px solid #999; }
+    .muted { color: var(--muted); }
+    .metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 16px; }
+    .metric { background: #12161d; border-radius: 10px; padding: 12px; }
+    .metric b { display: block; font-size: 22px; margin-top: 4px; }
+    .metric span { color: var(--muted); font-size: 12px; }
+    .note { color: var(--muted); font-size: 12px; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Jonbet Double Analyzer</h1>
+    <div id="health" class="status">conectando…</div>
+  </header>
+  <main>
+    <section class="card">
+      <h2>Giros recentes</h2>
+      <p class="note">Mais novo → mais antigo. Verde 1–7 · Preto 8–14 · Branco 0.</p>
+      <div id="strip" class="strip"></div>
+      <div id="timeline" class="timeline"></div>
+      <div class="metrics">
+        <div class="metric"><span>Total</span><b id="m-total">0</b></div>
+        <div class="metric"><span>Gap branco</span><b id="m-gap">0</b></div>
+        <div class="metric"><span>Sequência</span><b id="m-streak">—</b></div>
+      </div>
+      <div class="metrics">
+        <div class="metric"><span>Verde</span><b id="m-g">0</b></div>
+        <div class="metric"><span>Preto</span><b id="m-b">0</b></div>
+        <div class="metric"><span>Branco</span><b id="m-w">0</b></div>
+      </div>
+    </section>
+    <section class="card">
+      <h2>Cloud</h2>
+      <p class="note">Dados no Supabase. Poller 24/7 no Render. Este painel é o Netlify.</p>
+      <p class="note" id="meta" style="margin-top:12px"></p>
+    </section>
+  </main>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const colorLabel = { green: "Verde", black: "Preto", white: "Branco" };
+    const cfg = window.JB_ENV || {};
+    const client = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY);
+
+    function fmtTime(iso) {
+      if (!iso) return "—";
+      return new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    }
+
+    function metrics(spins) {
+      const counts = { green: 0, black: 0, white: 0 };
+      for (const s of spins) counts[s.color] = (counts[s.color] || 0) + 1;
+      let whiteGap = 0;
+      for (const s of spins) {
+        if (s.color === "white") break;
+        whiteGap += 1;
+      }
+      let streak = 0, streakColor = null;
+      if (spins.length) {
+        streakColor = spins[0].color;
+        for (const s of spins) {
+          if (s.color !== streakColor) break;
+          streak += 1;
+        }
+      }
+      return { total: spins.length, counts, whiteGap, streak, streakColor };
+    }
+
+    async function refresh() {
+      const { data, error, count } = await client
+        .from("spins")
+        .select("*", { count: "exact" })
+        .order("rolled_at", { ascending: false })
+        .limit(40);
+
+      const el = $("health");
+      if (error) {
+        el.textContent = "erro ao ler Supabase";
+        el.className = "status bad";
+        console.error(error);
+        return;
+      }
+
+      const spins = (data || []).map((r) => ({
+        color: r.color,
+        number: r.number,
+        rolledAt: r.rolled_at,
+        source: r.source,
+      }));
+
+      el.textContent = `supabase ok · ${count ?? spins.length} giros`;
+      el.className = "status ok";
+
+      const m = metrics(spins);
+      $("m-total").textContent = count ?? m.total;
+      $("m-gap").textContent = m.whiteGap;
+      $("m-streak").textContent = m.streakColor ? `${m.streak}× ${colorLabel[m.streakColor]}` : "—";
+      $("m-g").textContent = m.counts.green;
+      $("m-b").textContent = m.counts.black;
+      $("m-w").textContent = m.counts.white;
+
+      const strip = $("strip");
+      strip.innerHTML = "";
+      spins.forEach((s, i) => {
+        const wrap = document.createElement("div");
+        wrap.className = "chip-wrap" + (i === 0 ? " newest" : "");
+        wrap.innerHTML = `<div class="chip ${s.color}">${s.number}</div><div class="idx">${i === 0 ? "agora" : "-" + i}</div>`;
+        strip.appendChild(wrap);
+      });
+
+      const timeline = $("timeline");
+      timeline.innerHTML = "";
+      spins.slice(0, 20).forEach((s, i) => {
+        const row = document.createElement("div");
+        row.className = "t-row";
+        row.innerHTML = `
+          <span class="muted">${i === 0 ? "agora" : "#" + (i + 1)}</span>
+          <span><span class="dot ${s.color}"></span><b>${s.number}</b></span>
+          <span>${colorLabel[s.color] || s.color}</span>
+          <span class="muted">${fmtTime(s.rolledAt)}</span>`;
+        timeline.appendChild(row);
+      });
+
+      $("meta").textContent = spins[0]
+        ? `Último giro: ${colorLabel[spins[0].color]} ${spins[0].number} às ${fmtTime(spins[0].rolledAt)}`
+        : "Aguardando primeiro giro do poller Render…";
+    }
+
+    refresh();
+    setInterval(refresh, 3000);
+  </script>
+</body>
+</html>
