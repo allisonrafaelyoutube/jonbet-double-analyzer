@@ -1,25 +1,32 @@
+const CLOUD_SERVER = "https://jonbet-double-analyzer.onrender.com";
 const LOCAL_SERVER = "http://127.0.0.1:8787";
+// Preferência: local primeiro (modo PC + Supabase)
 let SERVER = LOCAL_SERVER;
 
 const JONBET_API =
   "https://jonbet.bet.br/api/singleplayer-originals/originals/roulette_games/recent/1";
 
-const HEALTH_MS = 1200;
-const POST_MS = 2500;
-const API_MS = 3000;
-
-function timedFetch(url, opts = {}, ms = HEALTH_MS) {
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), ms);
-  return fetch(url, { ...opts, signal: ctrl.signal }).finally(() => clearTimeout(t));
+async function pickServer() {
+  for (const base of [LOCAL_SERVER, CLOUD_SERVER]) {
+    try {
+      const r = await fetch(`${base}/health`, { signal: AbortSignal.timeout(4000) });
+      if (r.ok) {
+        SERVER = base;
+        return base;
+      }
+    } catch {
+      /* next */
+    }
+  }
+  SERVER = LOCAL_SERVER;
+  return SERVER;
 }
 
 async function checkServer() {
   try {
-    const r = await timedFetch(`${LOCAL_SERVER}/health`, { cache: "no-store" }, HEALTH_MS);
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    await pickServer();
+    const r = await fetch(`${SERVER}/health`);
     const data = await r.json();
-    SERVER = LOCAL_SERVER;
     await chrome.storage.local.set({
       serverOk: true,
       serverSpins: data.spins,
@@ -41,36 +48,29 @@ async function checkServer() {
 
 async function pollJonbetApi() {
   try {
-    const r = await timedFetch(
-      JONBET_API,
-      {
-        cache: "no-store",
-        headers: {
-          Accept: "application/json",
-          "Cache-Control": "no-cache",
-        },
+    const r = await fetch(JONBET_API, {
+      cache: "no-store",
+      headers: {
+        Accept: "application/json",
+        "Cache-Control": "no-cache",
       },
-      API_MS
-    );
+    });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const games = await r.json();
     if (!Array.isArray(games) || !games.length) return;
 
-    const res = await timedFetch(
-      `${LOCAL_SERVER}/events`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          source: "bg-api",
-          receivedAt: new Date().toISOString(),
-          saveRaw: false,
-          apiUrl: JONBET_API,
-          games,
-        }),
-      },
-      POST_MS
-    );
+    await pickServer();
+    const res = await fetch(`${SERVER}/events`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        source: "bg-api",
+        receivedAt: new Date().toISOString(),
+        saveRaw: false,
+        apiUrl: JONBET_API,
+        games,
+      }),
+    });
     const data = await res.json().catch(() => ({}));
     await chrome.storage.local.set({
       lastOkAt: Date.now(),
@@ -78,8 +78,7 @@ async function pollJonbetApi() {
       lastSource: "bg-api",
       lastError: null,
       serverOk: true,
-      serverUrl: LOCAL_SERVER,
-      serverSpins: data.spins,
+      serverUrl: SERVER,
     });
   } catch (err) {
     await chrome.storage.local.set({
@@ -90,12 +89,7 @@ async function pollJonbetApi() {
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg && msg.type === "jb-check-server") {
-    checkServer().then(sendResponse).catch((err) => sendResponse({ ok: false, error: String(err) }));
-    return true;
-  }
-
-  if (msg && msg.type === "jb-get-status") {
-    chrome.storage.local.get(null).then(sendResponse);
+    checkServer().then(sendResponse);
     return true;
   }
 
@@ -123,15 +117,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return false;
   }
 
-  timedFetch(
-    `${LOCAL_SERVER}/events`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    },
-    POST_MS
-  )
+  pickServer()
+    .then(() =>
+      fetch(`${SERVER}/events`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+    )
     .then(async (r) => {
       const data = await r.json().catch(() => ({}));
       await chrome.storage.local.set({
@@ -140,7 +133,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         lastInserted: data.inserted || 0,
         serverOk: true,
         lastSource: payload.source || "unknown",
-        serverUrl: LOCAL_SERVER,
+        serverUrl: SERVER,
       });
       sendResponse({ ok: r.ok, data });
     })

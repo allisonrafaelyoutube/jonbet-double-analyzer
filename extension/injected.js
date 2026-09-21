@@ -48,8 +48,84 @@
     return null;
   }
 
-  // DOM scrape desativado: inventava giros com horário errado e não batia com o site.
-  // Fonte oficial = API /roulette_games/recent/1 (+ poller no servidor).
+  function scrapeNewestSpin() {
+    const all = Array.from(document.querySelectorAll("body *"));
+    const labels = all.filter((el) => {
+      const own = Array.from(el.childNodes)
+        .filter((n) => n.nodeType === Node.TEXT_NODE)
+        .map((n) => (n.textContent || "").trim().toLowerCase())
+        .join(" ");
+      const t = own || (el.children.length === 0 ? (el.textContent || "").trim().toLowerCase() : "");
+      return t === "giros anteriores" || t === "previous rolls" || /^giros anteriores/.test(t);
+    });
+
+    let root = null;
+    for (const label of labels) {
+      const parent = label.parentElement;
+      if (!parent) continue;
+      const candidates = [parent, parent.nextElementSibling, parent.parentElement].filter(Boolean);
+      for (const c of candidates) {
+        let count = 0;
+        for (const n of c.querySelectorAll("div, span, button, a")) {
+          if (/^(0|1[0-4]|[1-9])$/.test((n.textContent || "").trim())) count += 1;
+        }
+        if (count >= 5) {
+          root = c;
+          break;
+        }
+      }
+      if (root) break;
+    }
+
+    if (!root) {
+      const numbered = all.filter((el) => {
+        const t = (el.textContent || "").trim();
+        return /^(0|1[0-4]|[1-9])$/.test(t) && el.children.length === 0;
+      });
+      if (numbered.length < 8) return null;
+      root = numbered[0].parentElement;
+    }
+
+    const cells = Array.from(root.querySelectorAll("div, span, button, a"))
+      .filter((el) => /^(0|1[0-4]|[1-9])$/.test((el.textContent || "").trim()))
+      .map((el) => {
+        const number = Number((el.textContent || "").trim());
+        const left = el.getBoundingClientRect().left;
+        return { number, left, color: colorFromNumber(number) };
+      })
+      .filter((c) => c.color && c.number >= 0 && c.number <= 14);
+
+    if (!cells.length) return null;
+    cells.sort((a, b) => a.left - b.left);
+    const newest = cells[0];
+    return { color: newest.color, number: newest.number, roundId: null };
+  }
+
+  let lastNewestKey = "";
+  let seeded = false;
+  function pollDom() {
+    try {
+      const spin = scrapeNewestSpin();
+      if (!spin) return;
+      const key = `${spin.color}:${spin.number}`;
+      if (!seeded) {
+        // First sighting: remember history tip, don't flood DB with whole strip
+        lastNewestKey = key;
+        seeded = true;
+        return;
+      }
+      if (key === lastNewestKey) return;
+      lastNewestKey = key;
+      post({
+        source: "dom",
+        receivedAt: new Date().toISOString(),
+        saveRaw: false,
+        spin,
+      });
+    } catch {
+      /* ignore */
+    }
+  }
 
   const NativeWS = window.WebSocket;
   function WrappedWebSocket(url, protocols) {
@@ -107,13 +183,16 @@
   Object.assign(WrappedWebSocket, NativeWS);
   window.WebSocket = WrappedWebSocket;
 
-  // Sync via API oficial (mesma fonte do site)
+  setInterval(pollDom, 1500);
+  setTimeout(pollDom, 1200);
+  setTimeout(pollDom, 3500);
+
+  // Sync paralelo via API oficial (não depende do WebSocket binário)
   const API_PATHS = [
     "/api/singleplayer-originals/originals/roulette_games/recent/1",
     "https://jonbet.bet.br/api/singleplayer-originals/originals/roulette_games/recent/1",
   ];
   let apiBusy = false;
-  let lastApiTip = "";
   async function pollApi() {
     if (apiBusy) return;
     apiBusy = true;
@@ -139,26 +218,21 @@
         }
       }
       if (games) {
-        const tip = `${games[0]?.id}:${games[0]?.roll}`;
-        // ainda reenvia periodicamente para o servidor pegar backlog; evita spam se igual
-        if (tip !== lastApiTip || Math.random() < 0.35) {
-          lastApiTip = tip;
-          post({
-            source: "extension-api",
-            receivedAt: new Date().toISOString(),
-            saveRaw: false,
-            apiUrl,
-            games,
-          });
-        }
+        post({
+          source: "extension-api",
+          receivedAt: new Date().toISOString(),
+          saveRaw: false,
+          apiUrl,
+          games,
+        });
       }
     } finally {
       apiBusy = false;
     }
   }
-  setInterval(pollApi, 2000);
-  setTimeout(pollApi, 400);
-  setTimeout(pollApi, 1500);
+  setInterval(pollApi, 3000);
+  setTimeout(pollApi, 800);
+  setTimeout(pollApi, 2500);
 
-  console.info("[Jonbet Double Analyzer] sync API oficial ativo em", location.host);
+  console.info("[Jonbet Double Analyzer] hook + API sync ativo em", location.host);
 })();

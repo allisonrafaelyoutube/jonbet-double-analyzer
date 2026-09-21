@@ -1,5 +1,5 @@
 {
-  "strategy": "dual-edge-v1",
-  "cooldownSeconds": 45,
-  "note": "Alertas usam Dual Edge v1 (padrões embutidos no server). Thresholds manuais não são mais usados no sinal."
+  "whiteGap": { "enabled": true, "threshold": 15 },
+  "sameColorStreak": { "enabled": true, "threshold": 5 },
+  "cooldownSeconds": 60
 }

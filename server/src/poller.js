@@ -10,7 +10,7 @@ const FALLBACKS = [
   "https://www.jonbet.bet.br/api/singleplayer-originals/originals/roulette_games/recent/1",
 ].filter((u, i, arr) => arr.indexOf(u) === i);
 
-const INTERVAL_MS = Number(process.env.POLL_MS || 1500);
+const INTERVAL_MS = Number(process.env.POLL_MS || 2000);
 const TIMEOUT_MS = Number(process.env.POLL_TIMEOUT_MS || 8000);
 const MAX_ATTEMPTS = 3;
 const FAIL_STREAK_BEFORE_BAD = 3;

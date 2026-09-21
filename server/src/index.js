@@ -4,7 +4,7 @@ const path = require("path");
 const express = require("express");
 const cors = require("cors");
 const db = require("./db");
-const { normalizeIncomingSpin } = require("./parser");
+const { parsePayload, normalizeIncomingSpin } = require("./parser");
 const { loadRules, saveRules, computeMetrics, maybeAlert } = require("./rules");
 const { startPoller, ingestGames } = require("./poller");
 
@@ -20,12 +20,12 @@ function touchHeartbeat() {
 }
 
 async function apiStatus() {
-  // Fonte de verdade: último giro oficial (rolled_at da API)
-  let newestRolledAt = null;
+  // Fonte de verdade: último giro gravado (extensão ou poller)
+  let newestReceivedAt = null;
   try {
-    const recent = await db.recentSpins(5);
-    const official = recent.find((s) => s.roundId && !String(s.roundId).includes("|"));
-    newestRolledAt = official?.rolledAt || recent[0]?.rolledAt || null;
+    const recent = await db.recentSpins(1);
+    if (recent[0]?.receivedAt) newestReceivedAt = recent[0].receivedAt;
+    else if (recent[0]?.rolledAt) newestReceivedAt = recent[0].rolledAt;
   } catch {
     /* ignore */
   }
@@ -36,7 +36,7 @@ async function apiStatus() {
   const cloudBlocked = db.getMeta("cloud_poll_blocked") === "1";
 
   const ages = [];
-  for (const iso of [newestRolledAt, lastApiAt]) {
+  for (const iso of [newestReceivedAt, lastApiAt, lastExtAt]) {
     if (!iso) continue;
     const ms = Date.now() - Date.parse(iso);
     if (Number.isFinite(ms) && ms >= 0) ages.push(ms);
@@ -47,8 +47,8 @@ async function apiStatus() {
   const okFlag = db.getMeta("last_api_ok") === "1";
 
   return {
-    lastApiAt: lastApiAt || newestRolledAt,
-    lastDataAt: newestRolledAt,
+    lastApiAt: lastApiAt || newestReceivedAt,
+    lastDataAt: newestReceivedAt,
     lastExtensionAt: lastExtAt,
     apiOk: fresh || (okFlag && failStreak < 5) || (cloudBlocked && fresh),
     apiFresh: fresh,
@@ -72,18 +72,6 @@ app.get("/health", async (_req, res) => {
   });
 });
 
-function isTrustedApiSource(source) {
-  return source === "api" || source === "bg-api" || source === "extension-api";
-}
-
-function looksLikeOfficialRoundId(id) {
-  if (!id) return false;
-  const s = String(id);
-  // IDs oficiais SoftSwiss/Jonbet (ex: xmlNPeVW1v) — rejeita sintéticos "iso|color|n"
-  if (s.includes("|")) return false;
-  return /^[A-Za-z0-9_-]{6,32}$/.test(s);
-}
-
 app.post("/events", async (req, res) => {
   touchHeartbeat();
   const body = req.body || {};
@@ -94,65 +82,75 @@ app.post("/events", async (req, res) => {
 
   let inserted = 0;
   const alerts = [];
+  const candidates = [];
 
-  // DOM scrape gera giros falsos — ignorar sempre
-  if (source === "dom") {
-    return res.json({ ok: true, inserted: 0, skipped: "dom-disabled" });
-  }
-
-  // Fonte de verdade: array games da API oficial
   if (Array.isArray(body.games) && body.games.length) {
     inserted += await ingestGames(
       db,
       body.games,
       body.apiUrl || "extension-api",
-      isTrustedApiSource(source) ? source : "extension-api"
+      source || "extension-api"
     );
     db.setMeta("last_api_at", new Date().toISOString());
     db.setMeta("last_api_ok", "1");
     db.setMeta("api_fail_streak", "0");
     db.setMeta("last_api_error", "");
+    // sync via extensão é o caminho válido na nuvem
     db.setMeta("last_extension_sync_at", new Date().toISOString());
   }
 
-  // WebSocket: só raw opcional — não inserir spins (parser binário gerava lixo)
-  if (source === "websocket" && saveRaw) {
-    try {
-      await db.insertRaw({
-        receivedAt,
-        wsUrl,
-        payload: typeof body.raw === "string" ? body.raw.slice(0, 2000) : "[binary]",
-      });
-    } catch {
-      /* ignore */
+  if (body.spin) {
+    const n = normalizeIncomingSpin(body.spin);
+    if (n) candidates.push(n);
+  }
+
+  if (Array.isArray(body.spins)) {
+    for (const s of body.spins) {
+      const n = normalizeIncomingSpin(s);
+      if (n) candidates.push(n);
     }
   }
 
-  // Spins avulsos só com roundId oficial (nunca inventar id sintético)
-  const loose = [];
-  if (body.spin) loose.push(body.spin);
-  if (Array.isArray(body.spins)) loose.push(...body.spins);
-  for (const spin of loose) {
-    const n = normalizeIncomingSpin(spin);
+  if (source === "websocket") {
+    const spins = parsePayload(body.raw, {
+      binaryBase64: body.binaryBase64 || (body.raw && body.raw.binaryBase64),
+    });
+    for (const s of spins) candidates.push(s);
+
+    if (saveRaw && spins.length) {
+      try {
+        const decodedSpins = spins.map((s) => `${s.color}:${s.number}`).join(",");
+        await db.insertRaw({
+          receivedAt,
+          wsUrl,
+          payload: `[binary decoded] ${decodedSpins}`,
+        });
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  for (const spin of candidates) {
+    const n = normalizeIncomingSpin(spin) || spin;
     if (!n || !n.color || n.number == null) continue;
-    if (!looksLikeOfficialRoundId(n.roundId)) continue;
-    if (!n.rolledAt) continue;
+    const rolledAt = n.rolledAt || receivedAt;
+    const roundId = n.roundId || `${rolledAt}|${n.color}|${n.number}`;
     const ok = await db.insertSpin({
-      roundId: String(n.roundId),
+      roundId,
       color: n.color,
       number: n.number,
-      rolledAt: n.rolledAt,
+      rolledAt,
       receivedAt,
-      source: source || "manual",
+      source,
       sourceUrl: wsUrl,
     });
     if (ok) inserted += 1;
   }
 
   if (inserted > 0) {
-    const spins = await db.recentSpins(200);
-    const metrics = computeMetrics(spins);
-    const fired = maybeAlert(metrics, loadRules(), spins);
+    const metrics = computeMetrics(await db.recentSpins(200));
+    const fired = maybeAlert(metrics, loadRules());
     if (fired) alerts.push(fired);
   }
 
@@ -203,9 +201,8 @@ app.get("/api/raw", async (req, res) => {
 startPoller(db, {
   onInsert: async (inserted) => {
     if (inserted > 0) {
-      const spins = await db.recentSpins(200);
-      const metrics = computeMetrics(spins);
-      maybeAlert(metrics, loadRules(), spins);
+      const metrics = computeMetrics(await db.recentSpins(200));
+      maybeAlert(metrics, loadRules());
     }
   },
 });
