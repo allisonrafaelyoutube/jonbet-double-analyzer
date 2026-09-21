@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Jonbet Double Analyzer",
-  "version": "1.0.6",
+  "version": "1.0.8",
   "description": "Captura WebSocket/histórico do Double e envia para o analisador local.",
   "permissions": ["storage", "alarms"],
   "host_permissions": [

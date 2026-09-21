@@ -6,14 +6,16 @@
   <title>Jonbet Double Analyzer</title>
   <style>
     :root {
-      --bg: #0e1116;
-      --panel: #171b22;
+      --bg: #0b0e13;
+      --panel: #141a22;
+      --panel2: #1a222d;
       --text: #e8eaed;
-      --muted: #9aa3af;
+      --muted: #8b95a5;
       --green: #00c74d;
-      --black: #2b3340;
+      --black-chip: #2b3340;
       --white: #f3f5f7;
       --accent: #3ddc97;
+      --warn: #f0b429;
       --danger: #ff6b6b;
       --line: #2a313c;
     }
@@ -21,7 +23,10 @@
     body {
       margin: 0;
       font-family: "Segoe UI", system-ui, sans-serif;
-      background: radial-gradient(1200px 600px at 10% -10%, #1a2433, var(--bg));
+      background:
+        radial-gradient(900px 480px at 0% -10%, #163024 0%, transparent 55%),
+        radial-gradient(800px 420px at 100% 0%, #1a2433 0%, transparent 50%),
+        var(--bg);
       color: var(--text);
       min-height: 100vh;
     }
@@ -30,154 +35,367 @@
       justify-content: space-between;
       align-items: center;
       gap: 16px;
-      padding: 20px 28px;
+      padding: 16px 24px;
       border-bottom: 1px solid var(--line);
+      backdrop-filter: blur(8px);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: color-mix(in srgb, var(--bg) 88%, transparent);
     }
-    h1 { margin: 0; font-size: 18px; letter-spacing: 0.02em; }
-    .status { color: var(--muted); font-size: 13px; text-align: right; }
+    h1 { margin: 0; font-size: 17px; letter-spacing: 0.02em; }
+    .status { color: var(--muted); font-size: 12px; text-align: right; }
     .status.ok { color: var(--accent); }
     .status.bad { color: var(--danger); }
+    .status.warn { color: var(--warn); }
+
     main {
       display: grid;
-      grid-template-columns: 1.4fr 1fr;
-      gap: 16px;
-      padding: 20px 28px 40px;
+      grid-template-columns: 1.35fr 0.9fr 0.95fr;
+      grid-template-areas:
+        "strip strip strip"
+        "signal nums bank"
+        "history results bank"
+        "history results extras";
+      gap: 14px;
+      padding: 16px 24px 32px;
     }
-    @media (max-width: 980px) { main { grid-template-columns: 1fr; } }
+    @media (max-width: 1100px) {
+      main {
+        grid-template-columns: 1fr 1fr;
+        grid-template-areas:
+          "strip strip"
+          "signal bank"
+          "nums nums"
+          "history results"
+          "extras extras";
+      }
+    }
+    @media (max-width: 720px) {
+      main {
+        grid-template-columns: 1fr;
+        grid-template-areas:
+          "strip" "signal" "nums" "bank" "history" "results" "extras";
+      }
+    }
+
+    .area-strip { grid-area: strip; }
+    .area-signal { grid-area: signal; }
+    .area-nums { grid-area: nums; }
+    .area-bank { grid-area: bank; }
+    .area-history { grid-area: history; }
+    .area-results { grid-area: results; }
+    .area-extras { grid-area: extras; }
+
     .card {
-      background: color-mix(in srgb, var(--panel) 92%, black);
+      background: color-mix(in srgb, var(--panel) 94%, black);
       border: 1px solid var(--line);
       border-radius: 14px;
-      padding: 16px;
+      padding: 14px 16px;
     }
     .card h2 {
-      margin: 0 0 12px;
-      font-size: 13px;
+      margin: 0 0 10px;
+      font-size: 12px;
       text-transform: uppercase;
-      letter-spacing: 0.08em;
+      letter-spacing: 0.09em;
       color: var(--muted);
       font-weight: 600;
     }
+    .note { color: var(--muted); font-size: 12px; line-height: 1.45; margin: 0 0 10px; }
+
     .strip {
       display: flex;
       flex-wrap: nowrap;
-      gap: 8px;
+      gap: 7px;
       overflow-x: auto;
-      padding-bottom: 6px;
-      min-height: 72px;
+      padding-bottom: 4px;
+      min-height: 64px;
     }
     .chip-wrap {
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 4px;
+      gap: 3px;
       flex: 0 0 auto;
     }
-    .chip-wrap .idx {
-      font-size: 10px;
-      color: var(--muted);
-    }
+    .chip-wrap.newest .chip { outline: 2px solid var(--accent); outline-offset: 2px; }
     .chip {
-      width: 40px;
-      height: 40px;
+      width: 36px;
+      height: 36px;
       border-radius: 999px;
       display: grid;
       place-items: center;
       font-size: 13px;
-      font-weight: 700;
+      font-weight: 800;
       color: #fff;
     }
     .chip.green { background: var(--green); }
-    .chip.black { background: var(--black); border: 1px solid #4a5568; }
+    .chip.black { background: var(--black-chip); border: 1px solid #4a5568; }
     .chip.white { background: var(--white); color: #111; }
-    .chip-wrap.newest .chip {
-      outline: 2px solid var(--accent);
-      outline-offset: 2px;
-    }
-    .timeline {
-      margin-top: 14px;
+    .idx { font-size: 10px; color: var(--muted); }
+
+    .metrics {
       display: grid;
-      gap: 6px;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .metric {
+      background: var(--panel2);
+      border-radius: 10px;
+      padding: 10px;
+    }
+    .metric b { display: block; font-size: 20px; margin-top: 2px; }
+    .metric span { color: var(--muted); font-size: 11px; }
+    .metric b.pos, .pos { color: var(--accent); }
+    .metric b.neg, .neg { color: var(--danger); }
+
+    .signal-box {
+      border-radius: 14px;
+      padding: 20px 18px;
+      background: linear-gradient(160deg, #1a1f28, #12161d 70%);
+      border: 2px solid var(--line);
+      min-height: 200px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      gap: 8px;
+      transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+    }
+    .signal-box.wait {
+      background: linear-gradient(160deg, #1c2014, #12161d 60%);
+      border-color: #3a3420;
+    }
+    .signal-box.green-sig {
+      border-color: #28a745;
+      background: linear-gradient(160deg, #0f2a18, #12161d 65%);
+      box-shadow: 0 0 28px rgba(40, 167, 69, 0.22);
+    }
+    .signal-box.black-sig {
+      border-color: #8b95a8;
+      background: linear-gradient(160deg, #1a1e26, #0d1016 65%);
+      box-shadow: 0 0 28px rgba(139, 149, 168, 0.18);
+    }
+    .signal-box.white-sig {
+      border-color: #e8ecf2;
+      background: linear-gradient(160deg, #2a2e36, #12161d 65%);
+      box-shadow: 0 0 28px rgba(232, 236, 242, 0.15);
+    }
+    .signal-box.win-flash {
+      border-color: var(--accent);
+      box-shadow: 0 0 32px rgba(61, 220, 151, 0.35);
+    }
+    .signal-box.loss-flash {
+      border-color: var(--danger);
+      box-shadow: 0 0 32px rgba(255, 107, 107, 0.3);
+    }
+    .signal-action {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .signal-color {
+      font-size: clamp(28px, 4vw, 40px);
+      font-weight: 900;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      line-height: 1.1;
+      margin: 2px 0;
+    }
+    .signal-color.green { color: var(--green); }
+    .signal-color.black { color: #d6dce8; }
+    .signal-color.white { color: #fff; text-shadow: 0 0 12px rgba(255,255,255,0.25); }
+    .signal-color.idle { color: #8b7355; font-size: clamp(22px, 3vw, 30px); }
+    .signal-reason { color: var(--muted); font-size: 12px; line-height: 1.45; max-width: 300px; }
+    .signal-pattern {
+      font-size: 11px;
+      color: var(--accent);
+      letter-spacing: 0.04em;
+    }
+    .pill {
+      display: inline-block;
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: #0f1319;
+      color: var(--muted);
+      border: 1px solid var(--line);
+    }
+    .pill.live { color: #9dffb5; border-color: #1f6b3d; background: #0d1a12; }
+    .pill.win { color: #9dffb5; border-color: #1f6b3d; background: #0d1a12; }
+    .pill.loss { color: #ffb4b4; border-color: #6b2a2a; background: #1a1010; }
+
+    .num-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 8px;
+    }
+    .num-cell {
+      background: var(--panel2);
+      border-radius: 10px;
+      padding: 8px;
+      text-align: center;
+    }
+    .num-cell .n {
+      width: 28px;
+      height: 28px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      margin: 0 auto 6px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #fff;
+    }
+    .num-cell .n.green { background: var(--green); }
+    .num-cell .n.black { background: var(--black-chip); border: 1px solid #4a5568; }
+    .num-cell .n.white { background: var(--white); color: #111; }
+    .num-cell .cnt { font-size: 14px; font-weight: 700; }
+    .num-cell .bar {
+      margin-top: 6px;
+      height: 4px;
+      border-radius: 99px;
+      background: #0f1319;
+      overflow: hidden;
+    }
+    .num-cell .bar > i {
+      display: block;
+      height: 100%;
+      background: var(--accent);
+      width: 0;
+    }
+
+    .timeline {
+      display: grid;
+      gap: 5px;
       max-height: 280px;
       overflow: auto;
     }
     .t-row {
       display: grid;
-      grid-template-columns: 56px 52px 1fr 70px;
+      grid-template-columns: 48px 48px 1fr 64px;
       gap: 8px;
       align-items: center;
-      font-size: 13px;
-      padding: 8px 10px;
-      background: #12161d;
+      font-size: 12px;
+      padding: 7px 9px;
+      background: var(--panel2);
       border-radius: 8px;
     }
-    .t-row .dot {
-      width: 12px;
-      height: 12px;
+    .dot {
+      width: 10px;
+      height: 10px;
       border-radius: 50%;
       display: inline-block;
-      margin-right: 6px;
+      margin-right: 5px;
       vertical-align: middle;
     }
     .dot.green { background: var(--green); }
     .dot.black { background: #8b95a5; }
     .dot.white { background: var(--white); border: 1px solid #999; }
     .muted { color: var(--muted); }
-    .metrics {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 10px;
-    }
-    .metric {
-      background: #12161d;
-      border-radius: 10px;
-      padding: 12px;
-    }
-    .metric b { display: block; font-size: 22px; margin-top: 4px; }
-    .metric span { color: var(--muted); font-size: 12px; }
+
     label {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      gap: 12px;
-      margin: 10px 0;
-      font-size: 14px;
+      gap: 10px;
+      margin: 8px 0;
+      font-size: 13px;
     }
-    input[type="number"] {
-      width: 72px;
+    input[type="number"], select {
+      width: 88px;
       background: #0f1319;
       border: 1px solid var(--line);
       color: var(--text);
       border-radius: 8px;
-      padding: 8px;
+      padding: 7px 8px;
     }
+    select { width: 140px; }
     button {
       background: var(--accent);
       color: #042015;
       border: 0;
       border-radius: 10px;
-      padding: 10px 14px;
+      padding: 9px 12px;
       font-weight: 700;
       cursor: pointer;
+      font-size: 12px;
     }
     button.secondary {
       background: transparent;
       color: var(--text);
       border: 1px solid var(--line);
     }
-    .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
-    pre {
-      max-height: 220px;
-      overflow: auto;
-      background: #0b0e13;
-      border-radius: 10px;
-      padding: 10px;
-      font-size: 11px;
-      color: #b7c0cc;
-      white-space: pre-wrap;
-      word-break: break-word;
+    .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+    .sim-result {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 12px;
     }
-    .note { color: var(--muted); font-size: 12px; line-height: 1.5; margin-top: 8px; }
+
+    .score {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .trade-list {
+      display: grid;
+      gap: 6px;
+      max-height: 320px;
+      overflow: auto;
+    }
+    .trade {
+      display: grid;
+      grid-template-columns: 54px 1fr auto;
+      gap: 8px;
+      align-items: center;
+      padding: 8px 10px;
+      background: var(--panel2);
+      border-radius: 10px;
+      font-size: 12px;
+    }
+    .badge {
+      font-weight: 800;
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      padding: 4px 8px;
+      border-radius: 8px;
+      text-align: center;
+    }
+    .badge.win { background: #123022; color: var(--accent); }
+    .badge.loss { background: #2a1414; color: var(--danger); }
+    .badge.open { background: #2a2414; color: var(--warn); }
+    .pattern-list {
+      display: grid;
+      gap: 6px;
+      margin: 0 0 12px;
+    }
+    .pattern-item {
+      font-size: 12px;
+      color: var(--muted);
+      padding: 8px 10px;
+      background: var(--panel2);
+      border-radius: 8px;
+      line-height: 1.4;
+    }
+    .pattern-item b { color: var(--text); }
+
+    details.card summary {
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      list-style: none;
+    }
+    details.card summary::-webkit-details-marker { display: none; }
+    details.card[open] summary { margin-bottom: 10px; }
   </style>
 </head>
 <body>
@@ -185,73 +403,166 @@
     <h1>Jonbet Double Analyzer</h1>
     <div id="health" class="status">conectando…</div>
   </header>
+
   <main>
-    <section class="card">
+    <section class="card area-strip">
       <h2>Giros recentes</h2>
-      <p class="note" style="margin-top:0">Ordem: <b style="color:#e8eaed">mais novo → mais antigo</b> (esquerda → direita). Cores: verde 1–7 · preto 8–14 · branco 0.</p>
+      <p class="note">Mais novo → mais antigo. Verde 1–7 · Preto 8–14 · Branco 0. Sinais = padrões de estudo (casa ainda tem vantagem).</p>
       <div id="strip" class="strip"></div>
-      <div id="timeline" class="timeline"></div>
-      <div class="metrics" style="margin-top:16px">
-        <div class="metric"><span>Total salvo</span><b id="m-total">0</b></div>
+      <div class="metrics">
+        <div class="metric"><span>Total</span><b id="m-total">0</b></div>
         <div class="metric"><span>Gap branco</span><b id="m-gap">0</b></div>
         <div class="metric"><span>Sequência</span><b id="m-streak">—</b></div>
       </div>
-      <div class="metrics" style="margin-top:10px">
+      <div class="metrics">
         <div class="metric"><span>Verde</span><b id="m-g">0</b></div>
         <div class="metric"><span>Preto</span><b id="m-b">0</b></div>
         <div class="metric"><span>Branco</span><b id="m-w">0</b></div>
       </div>
     </section>
 
-    <section class="card">
-      <h2>Regras de alerta</h2>
-      <label>
-        <span><input type="checkbox" id="r-white-on" /> Gap sem branco ≥</span>
-        <input type="number" id="r-white-n" min="1" max="200" />
-      </label>
-      <label>
-        <span><input type="checkbox" id="r-streak-on" /> Mesma cor (sem branco) ≥</span>
-        <input type="number" id="r-streak-n" min="2" max="50" />
-      </label>
-      <label>
-        <span>Cooldownoldown (segundos)</span>
-        <input type="number" id="r-cd" min="5" max="600" />
-      </label>
-      <div class="row">
-        <button id="save-rules">Salvar regras</button>
-        <button class="secondary" id="refresh">Atualizar</button>
-        <button class="secondary" id="reset">Limpar histórico</button>
+    <section class="card area-signal">
+      <h2>Sinal</h2>
+      <p class="note">Quando um padrão bater → entrar na cor. Depois o painel marca WIN ou LOSS.</p>
+      <div id="signal" class="signal-box wait">
+        <span class="pill">aguardando</span>
+        <div class="signal-action">—</div>
+        <div class="signal-color idle">SEM SINAL</div>
+        <div class="signal-reason">Carregando histórico…</div>
       </div>
-      <p class="note">Sync triplo: poller do servidor (retry) + extensão na página + background. Falhas pontuais não derrubam a leitura.</p>
     </section>
 
-    <section class="card" style="grid-column: 1 / -1">
-      <h2>Raw / debug</h2>
-      <pre id="raw">carregando…</pre>
+    <section class="card area-nums">
+      <h2>Frequência dos números</h2>
+      <p class="note">Quantas vezes cada número (0–14) apareceu no histórico carregado.</p>
+      <div id="nums" class="num-grid"></div>
     </section>
+
+    <section class="card area-bank">
+      <h2>Simulação de banca</h2>
+      <p class="note">Replay da estratégia Dual Edge no histórico. Stake usada também no placar ao vivo.</p>
+      <label><span>Banca inicial (R$)</span><input type="number" id="sim-bank" min="1" step="1" value="100" /></label>
+      <label><span>Aposta base (R$)</span><input type="number" id="sim-stake" min="0.5" step="0.5" value="2" /></label>
+      <label>
+        <span>Gestão</span>
+        <select id="sim-strategy">
+          <option value="fixed">Fixa</option>
+          <option value="martingale">Martingale (2x no loss)</option>
+        </select>
+      </label>
+      <label><span>Máx. martingale</span><input type="number" id="sim-maxmg" min="1" max="12" value="5" /></label>
+      <div class="row">
+        <button id="sim-run" type="button">Simular</button>
+        <button class="secondary" id="refresh" type="button">Atualizar</button>
+        <button class="secondary" id="reset-trades" type="button">Zerar placar</button>
+      </div>
+      <div class="sim-result">
+        <div class="metric"><span>Banca final</span><b id="sim-final">—</b></div>
+        <div class="metric"><span>Lucro / prejuízo</span><b id="sim-pnl">—</b></div>
+        <div class="metric"><span>Acertos</span><b id="sim-wins">—</b></div>
+        <div class="metric"><span>Drawdown máx.</span><b id="sim-dd">—</b></div>
+      </div>
+    </section>
+
+    <section class="card area-history">
+      <h2>Linha do tempo</h2>
+      <div id="timeline" class="timeline"></div>
+    </section>
+
+    <section class="card area-results">
+      <h2>Estratégia Dual Edge</h2>
+      <div class="pattern-list">
+        <div class="pattern-item"><b>1. Contra-sequência</b> — 5+ Verde/Preto → aposta a cor oposta</div>
+        <div class="pattern-item"><b>2. Quebra de alternância</b> — 5+ V-P-V-P… → aposta a quebra</div>
+        <div class="pattern-item"><b>3. Seca de cor</b> — nas últimas 12, cor ≤2 vezes → entra nela</div>
+        <div class="pattern-item"><b>4. Pós-branco</b> — após 0, entra na cor mais seca das últimas 10</div>
+        <div class="pattern-item"><b>5. Gap branco</b> — ≥16 sem branco → aposta Branco</div>
+      </div>
+      <div class="score">
+        <div class="metric"><span>Wins</span><b id="sc-wins" class="pos">0</b></div>
+        <div class="metric"><span>Losses</span><b id="sc-losses" class="neg">0</b></div>
+        <div class="metric"><span>Assertividade</span><b id="sc-rate">—</b></div>
+        <div class="metric"><span>P&amp;L virtual</span><b id="sc-pnl">—</b></div>
+      </div>
+      <div class="row" style="margin:0 0 10px">
+        <button class="secondary" id="reset" type="button">Limpar giros (storage)</button>
+      </div>
+      <h2>Histórico WIN / LOSS</h2>
+      <div id="trades" class="trade-list"></div>
+    </section>
+
+    <details class="card area-extras">
+      <summary>Raw / debug (opcional)</summary>
+      <pre id="raw" style="margin:0;max-height:160px;overflow:auto;background:#0b0e13;border-radius:10px;padding:10px;font-size:11px;color:#b7c0cc;white-space:pre-wrap;word-break:break-word">—</pre>
+    </details>
   </main>
+
   <script>
     const $ = (id) => document.getElementById(id);
     const colorLabel = { green: "Verde", black: "Preto", white: "Branco" };
+    const colorTitle = { green: "VERDE", black: "PRETO", white: "BRANCO" };
+    const PAYOUT = { green: 2, black: 2, white: 14 };
+    const LEDGER_KEY = "jda_dual_edge_ledger_v1";
+    const PENDING_KEY = "jda_dual_edge_pending_v1";
+
+    let lastSpins = [];
+    let lastSignal = null;
+    let flashResult = null;
+
+    function colorFromNumber(n) {
+      if (n === 0) return "white";
+      if (n >= 1 && n <= 7) return "green";
+      if (n >= 8 && n <= 14) return "black";
+      return "black";
+    }
 
     function fmtTime(iso) {
       if (!iso) return "—";
-      const d = new Date(iso);
-      return d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+      return new Date(iso).toLocaleTimeString("pt-BR", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      });
+    }
+
+    function fmtMoney(n) {
+      return Number(n).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+    }
+
+    function spinKey(s) {
+      return String(s?.id ?? `${s?.rolledAt}|${s?.number}|${s?.color}`);
+    }
+
+    function loadLedger() {
+      try {
+        return JSON.parse(localStorage.getItem(LEDGER_KEY) || "[]");
+      } catch {
+        return [];
+      }
+    }
+
+    function saveLedger(rows) {
+      localStorage.setItem(LEDGER_KEY, JSON.stringify(rows.slice(0, 300)));
+    }
+
+    function loadPending() {
+      try {
+        return JSON.parse(localStorage.getItem(PENDING_KEY) || "null");
+      } catch {
+        return null;
+      }
+    }
+
+    function savePending(p) {
+      if (!p) localStorage.removeItem(PENDING_KEY);
+      else localStorage.setItem(PENDING_KEY, JSON.stringify(p));
     }
 
     function chip(spin, index) {
       const wrap = document.createElement("div");
       wrap.className = "chip-wrap" + (index === 0 ? " newest" : "");
-      wrap.title = `${colorLabel[spin.color] || spin.color} #${spin.number} · ${fmtTime(spin.rolledAt)} · ${spin.source || ""}`;
-      const d = document.createElement("div");
-      d.className = `chip ${spin.color}`;
-      d.textContent = spin.number;
-      const idx = document.createElement("div");
-      idx.className = "idx";
-      idx.textContent = index === 0 ? "agora" : `-${index}`;
-      wrap.appendChild(d);
-      wrap.appendChild(idx);
+      wrap.title = `${colorLabel[spin.color]} #${spin.number} · ${fmtTime(spin.rolledAt)}`;
+      wrap.innerHTML = `<div class="chip ${spin.color}">${spin.number}</div><div class="idx">${index === 0 ? "agora" : "-" + index}</div>`;
       return wrap;
     }
 
@@ -262,85 +573,514 @@
         <span class="muted">${index === 0 ? "agora" : "#" + (index + 1)}</span>
         <span><span class="dot ${spin.color}"></span><b>${spin.number}</b></span>
         <span>${colorLabel[spin.color] || spin.color}</span>
-        <span class="muted">${fmtTime(spin.rolledAt)}</span>
-      `;
+        <span class="muted">${fmtTime(spin.rolledAt)}</span>`;
       return el;
     }
 
-    async function loadRulesIntoForm() {
-      const rules = await fetch("/api/rules").then((r) => r.json());
-      $("r-white-on").checked = !!rules.whiteGap?.enabled;
-      $("r-white-n").value = rules.whiteGap?.threshold ?? 15;
-      $("r-streak-on").checked = !!rules.sameColorStreak?.enabled;
-      $("r-streak-n").value = rules.sameColorStreak?.threshold ?? 5;
-      $("r-cd").value = rules.cooldownSeconds ?? 60;
+    function numberFreq(spins) {
+      const counts = Array.from({ length: 15 }, () => 0);
+      for (const s of spins) {
+        const n = Number(s.number);
+        if (n >= 0 && n <= 14) counts[n] += 1;
+      }
+      return counts;
+    }
+
+    function metricsHelper(spins) {
+      let whiteGap = 0;
+      for (const s of spins) {
+        if (s.color === "white") break;
+        whiteGap += 1;
+      }
+      let streak = 0;
+      const streakColor = spins[0]?.color || null;
+      for (const s of spins) {
+        if (s.color !== streakColor) break;
+        streak += 1;
+      }
+      return { whiteGap, streak, streakColor };
+    }
+
+    /** Dual Edge v1 — padrões embutidos (heurísticas de estudo, não edge real). */
+    function computeSignal(spins) {
+      if (!spins.length) {
+        return {
+          color: null,
+          action: "Aguarde",
+          title: "SEM SINAL",
+          reason: "Aguardando giros…",
+          pattern: null,
+          level: "wait",
+        };
+      }
+
+      const { whiteGap, streak, streakColor } = metricsHelper(spins);
+      const candidates = [];
+
+      // 1) Contra-sequência: 5+ mesma cor (G/P) → oposta
+      if (streak >= 5 && streakColor && streakColor !== "white") {
+        const opposite = streakColor === "green" ? "black" : "green";
+        candidates.push({
+          priority: 100 + streak,
+          color: opposite,
+          pattern: "Contra-sequência",
+          reason: `${streak}× ${colorLabel[streakColor]} → entrar na oposta.`,
+        });
+      }
+
+      // 2) Quebra de alternância V-P-V-P… (≥5)
+      {
+        const seq = [];
+        for (const s of spins) {
+          if (s.color === "white") break;
+          seq.push(s.color);
+          if (seq.length >= 8) break;
+        }
+        if (seq.length >= 5) {
+          let alt = true;
+          for (let i = 1; i < seq.length; i++) {
+            if (seq[i] === seq[i - 1]) {
+              alt = false;
+              break;
+            }
+          }
+          if (alt) {
+            const last = seq[0];
+            const breakColor = last === "green" ? "black" : "green";
+            candidates.push({
+              priority: 90 + seq.length,
+              color: breakColor,
+              pattern: "Quebra de alternância",
+              reason: `${seq.length} giros alternando → aposta na quebra (${colorLabel[breakColor]}).`,
+            });
+          }
+        }
+      }
+
+      // 3) Seca de cor nas últimas 12
+      {
+        const window = spins.slice(0, 12);
+        if (window.length >= 12) {
+          const c = { green: 0, black: 0, white: 0 };
+          for (const s of window) c[s.color] += 1;
+          if (c.green <= 2 && c.black > c.green) {
+            candidates.push({
+              priority: 80 + (2 - c.green),
+              color: "green",
+              pattern: "Seca de cor",
+              reason: `Só ${c.green} Verde(s) nas últimas 12 → entrar no Verde.`,
+            });
+          }
+          if (c.black <= 2 && c.green > c.black) {
+            candidates.push({
+              priority: 80 + (2 - c.black),
+              color: "black",
+              pattern: "Seca de cor",
+              reason: `Só ${c.black} Preto(s) nas últimas 12 → entrar no Preto.`,
+            });
+          }
+        }
+      }
+
+      // 4) Pós-branco: após 0, cor mais seca nas 10 anteriores
+      if (spins[0]?.color === "white") {
+        const window = spins.slice(1, 11);
+        const c = { green: 0, black: 0 };
+        for (const s of window) {
+          if (s.color === "green" || s.color === "black") c[s.color] += 1;
+        }
+        if (c.green + c.black >= 4) {
+          const color = c.green <= c.black ? "green" : "black";
+          candidates.push({
+            priority: 70,
+            color,
+            pattern: "Pós-branco",
+            reason: `Saiu branco → entrar no ${colorLabel[color]} (mais seco nas 10 anteriores).`,
+          });
+        }
+      }
+
+      // 5) Gap branco alto
+      if (whiteGap >= 16) {
+        candidates.push({
+          priority: 60 + Math.min(whiteGap, 40),
+          color: "white",
+          pattern: "Gap branco",
+          reason: `${whiteGap} giros sem branco → entrada no Branco.`,
+        });
+      }
+
+      candidates.sort((a, b) => b.priority - a.priority);
+      const best = candidates[0];
+      if (!best) {
+        return {
+          color: null,
+          action: "Aguarde",
+          title: "SEM SINAL",
+          reason: `Nenhum padrão ativo. Gap ${whiteGap} · seq. ${streak}× ${colorLabel[streakColor] || "—"}`,
+          pattern: null,
+          level: "wait",
+          whiteGap,
+          streak,
+          streakColor,
+        };
+      }
+
+      return {
+        color: best.color,
+        action: "Aposte no",
+        title: colorTitle[best.color],
+        reason: best.reason,
+        pattern: best.pattern,
+        level: best.color === "green" ? "green-sig" : best.color === "black" ? "black-sig" : "white-sig",
+        whiteGap,
+        streak,
+        streakColor,
+      };
+    }
+
+    function paintSignal(sig, opts = {}) {
+      const box = $("signal");
+      let level = sig.level || "wait";
+      if (opts.flash === "win") level = "win-flash";
+      if (opts.flash === "loss") level = "loss-flash";
+      box.className = "signal-box " + level;
+
+      let pillClass = "pill";
+      let pillText = "neutro";
+      if (opts.flash === "win") {
+        pillClass = "pill win";
+        pillText = "WIN";
+      } else if (opts.flash === "loss") {
+        pillClass = "pill loss";
+        pillText = "LOSS";
+      } else if (opts.pending) {
+        pillClass = "pill live";
+        pillText = "em jogo — aguarde o próximo giro";
+      } else if (sig.color) {
+        pillClass = "pill live";
+        pillText = "entrar agora";
+      }
+
+      const colorCls = sig.color || "idle";
+      box.innerHTML = `
+        <span class="${pillClass}">${pillText}</span>
+        <div class="signal-action">${sig.action || "Aguarde"}</div>
+        <div class="signal-color ${colorCls}">${sig.title}</div>
+        ${sig.pattern ? `<div class="signal-pattern">${sig.pattern}</div>` : ""}
+        <div class="signal-reason">${sig.reason}</div>`;
+      lastSignal = sig;
+    }
+
+    function paintNums(spins) {
+      const counts = numberFreq(spins);
+      const max = Math.max(1, ...counts);
+      const root = $("nums");
+      root.innerHTML = "";
+      for (let n = 0; n <= 14; n++) {
+        const color = colorFromNumber(n);
+        const cell = document.createElement("div");
+        cell.className = "num-cell";
+        const pct = Math.round((counts[n] / max) * 100);
+        cell.innerHTML = `
+          <div class="n ${color}">${n}</div>
+          <div class="cnt">${counts[n]}</div>
+          <div class="bar"><i style="width:${pct}%"></i></div>`;
+        root.appendChild(cell);
+      }
+    }
+
+    function tradePnl(color, stake, win) {
+      if (win) return stake * (PAYOUT[color] - 1);
+      return -stake;
+    }
+
+    function paintTrades(ledger, pending) {
+      const wins = ledger.filter((t) => t.win).length;
+      const losses = ledger.filter((t) => !t.win).length;
+      const played = wins + losses;
+      const pnl = ledger.reduce((a, t) => a + Number(t.pnl || 0), 0);
+      $("sc-wins").textContent = String(wins);
+      $("sc-losses").textContent = String(losses);
+      $("sc-rate").textContent = played ? `${Math.round((wins / played) * 100)}%` : "—";
+      $("sc-pnl").textContent = fmtMoney(pnl);
+      $("sc-pnl").className = pnl >= 0 ? "pos" : "neg";
+
+      const root = $("trades");
+      root.innerHTML = "";
+      const rows = [];
+      if (pending) {
+        rows.push({
+          open: true,
+          color: pending.color,
+          pattern: pending.pattern,
+          at: pending.at,
+          reason: pending.reason,
+        });
+      }
+      for (const t of ledger.slice(0, 40)) rows.push(t);
+
+      if (!rows.length) {
+        root.innerHTML = `<div class="note">Ainda sem entradas. Quando um padrão bater, o sinal entra e o resultado aparece aqui.</div>`;
+        return;
+      }
+
+      for (const t of rows) {
+        const el = document.createElement("div");
+        el.className = "trade";
+        if (t.open) {
+          el.innerHTML = `
+            <span class="badge open">OPEN</span>
+            <div>
+              <div><b>Aposte no ${colorLabel[t.color]}</b> · ${t.pattern || "—"}</div>
+              <div class="muted">${t.reason || "Aguardando próximo giro"}</div>
+            </div>
+            <span class="muted">${fmtTime(t.at)}</span>`;
+        } else {
+          el.innerHTML = `
+            <span class="badge ${t.win ? "win" : "loss"}">${t.win ? "WIN" : "LOSS"}</span>
+            <div>
+              <div><b>${colorLabel[t.color]}</b> · ${t.pattern || "—"} → saiu ${colorLabel[t.resultColor] || t.resultColor}</div>
+              <div class="muted">${t.reason || ""} · ${fmtMoney(t.pnl)}</div>
+            </div>
+            <span class="muted">${fmtTime(t.at)}</span>`;
+        }
+        root.appendChild(el);
+      }
+    }
+
+    /** Resolve pending when a newer spin arrives; open new pending when pattern fires. */
+    function syncLiveSignals(spins) {
+      if (!spins.length) {
+        paintSignal(computeSignal([]));
+        paintTrades(loadLedger(), null);
+        return;
+      }
+
+      const newest = spins[0];
+      const newestId = spinKey(newest);
+      let pending = loadPending();
+      let ledger = loadLedger();
+      const stake = Number($("sim-stake").value) || 2;
+
+      if (pending && pending.afterId && pending.afterId !== newestId) {
+        const win = newest.color === pending.color;
+        const pnl = tradePnl(pending.color, pending.stake || stake, win);
+        const trade = {
+          id: `${pending.afterId}->${newestId}`,
+          color: pending.color,
+          pattern: pending.pattern,
+          reason: pending.reason,
+          resultColor: newest.color,
+          resultNumber: newest.number,
+          win,
+          pnl,
+          stake: pending.stake || stake,
+          at: newest.rolledAt || new Date().toISOString(),
+        };
+        // avoid duplicates
+        if (!ledger.some((t) => t.id === trade.id)) {
+          ledger = [trade, ...ledger];
+          saveLedger(ledger);
+        }
+        flashResult = { flash: win ? "win" : "loss", sig: {
+          color: pending.color,
+          action: win ? "Acertou" : "Errou",
+          title: win ? "WIN" : "LOSS",
+          reason: `Apostou ${colorLabel[pending.color]} · saiu ${colorLabel[newest.color]} #${newest.number} (${pending.pattern})`,
+          pattern: pending.pattern,
+          level: win ? "win-flash" : "loss-flash",
+        }};
+        savePending(null);
+        pending = null;
+      }
+
+      // After resolve (or if idle), compute signal from current history for NEXT spin
+      const sig = computeSignal(spins);
+      if (!pending && sig.color) {
+        pending = {
+          afterId: newestId,
+          color: sig.color,
+          pattern: sig.pattern,
+          reason: sig.reason,
+          stake,
+          at: new Date().toISOString(),
+        };
+        savePending(pending);
+      }
+
+      if (flashResult) {
+        paintSignal(flashResult.sig, { flash: flashResult.flash });
+        const keep = flashResult;
+        flashResult = null;
+        setTimeout(() => {
+          const p = loadPending();
+          const live = p ? {
+            color: p.color,
+            action: "Aposte no",
+            title: colorTitle[p.color],
+            reason: p.reason,
+            pattern: p.pattern,
+            level: p.color === "green" ? "green-sig" : p.color === "black" ? "black-sig" : "white-sig",
+          } : computeSignal(lastSpins);
+          paintSignal(live, { pending: !!p && !!p.color });
+        }, 2800);
+      } else if (pending) {
+        paintSignal({
+          color: pending.color,
+          action: "Aposte no",
+          title: colorTitle[pending.color],
+          reason: pending.reason,
+          pattern: pending.pattern,
+          level: pending.color === "green" ? "green-sig" : pending.color === "black" ? "black-sig" : "white-sig",
+        }, { pending: true });
+      } else {
+        paintSignal(sig);
+      }
+
+      paintTrades(ledger, pending);
+    }
+
+    function runSimulation(spinsNewestFirst, opts) {
+      const chrono = [...spinsNewestFirst].reverse();
+      let bank = Number(opts.bank);
+      const baseStake = Number(opts.stake);
+      const maxMg = Number(opts.maxMg);
+      const strategy = opts.strategy;
+
+      let wins = 0;
+      let losses = 0;
+      let peak = bank;
+      let maxDd = 0;
+      let mgLevel = 0;
+      let skipped = 0;
+
+      for (let i = 0; i < chrono.length; i++) {
+        const pastNewestFirst = chrono.slice(0, i).reverse();
+        const sig = computeSignal(pastNewestFirst);
+        if (!sig.color) {
+          skipped += 1;
+          continue;
+        }
+
+        let stake = baseStake;
+        if (strategy === "martingale") {
+          stake = baseStake * Math.pow(2, mgLevel);
+        }
+        if (stake > bank) break;
+
+        const outcome = chrono[i];
+        bank -= stake;
+        if (outcome.color === sig.color) {
+          bank += stake * PAYOUT[sig.color];
+          wins += 1;
+          mgLevel = 0;
+        } else {
+          losses += 1;
+          if (strategy === "martingale") {
+            mgLevel = Math.min(maxMg, mgLevel + 1);
+          }
+        }
+        peak = Math.max(peak, bank);
+        maxDd = Math.max(maxDd, peak - bank);
+      }
+
+      return {
+        final: bank,
+        pnl: bank - Number(opts.bank),
+        wins,
+        losses,
+        maxDd,
+        skipped,
+        played: wins + losses,
+      };
     }
 
     async function refresh() {
-      const [health, stats, spins, raw] = await Promise.all([
+      const [health, stats, spinsPack, raw] = await Promise.all([
         fetch("/health").then((r) => r.json()),
         fetch("/api/stats").then((r) => r.json()),
-        fetch("/api/spins?limit=40").then((r) => r.json()),
-        fetch("/api/raw?limit=12").then((r) => r.json()),
+        fetch("/api/spins?limit=500").then((r) => r.json()),
+        fetch("/api/raw?limit=8").then((r) => r.json()),
       ]);
 
       const apiAge = health.apiAgeSec != null ? health.apiAgeSec : Infinity;
       const el = $("health");
       if (health.apiOk && apiAge < 120) {
-        const via = health.cloudPollBlocked ? "via extensão" : "sync";
-        el.textContent = `${via} ok · há ${apiAge}s · ${health.spins} giros`;
+        el.textContent = `sync ok · há ${apiAge}s · ${health.spins} giros`;
         el.className = "status ok";
       } else if (apiAge < 180) {
-        el.textContent = `aguardando próximo giro · há ${apiAge}s · ${health.spins} giros`;
-        el.className = "status";
+        el.textContent = `aguardando giro · há ${apiAge}s · ${health.spins} giros`;
+        el.className = "status warn";
       } else {
-        el.textContent = `sem dados novos · ${health.spins} giros — abra o Double + extensão`;
+        el.textContent = `sem dados novos · ${health.spins} giros`;
         el.className = "status bad";
       }
 
       const m = stats.metrics;
       $("m-total").textContent = m.total;
       $("m-gap").textContent = m.whiteGap;
-      $("m-streak").textContent = m.streakColor ? `${m.streak}× ${colorLabel[m.streakColor] || m.streakColor}` : "—";
+      $("m-streak").textContent = m.streakColor
+        ? `${m.streak}× ${colorLabel[m.streakColor] || m.streakColor}`
+        : "—";
       $("m-g").textContent = m.counts.green;
       $("m-b").textContent = m.counts.black;
       $("m-w").textContent = m.counts.white;
 
-      const list = spins.data || [];
+      const list = spinsPack.data || [];
+      lastSpins = list;
+
       const strip = $("strip");
       strip.innerHTML = "";
-      list.forEach((s, i) => strip.appendChild(chip(s, i)));
+      list.slice(0, 40).forEach((s, i) => strip.appendChild(chip(s, i)));
 
       const timeline = $("timeline");
       timeline.innerHTML = "";
-      list.slice(0, 20).forEach((s, i) => timeline.appendChild(row(s, i)));
+      list.slice(0, 25).forEach((s, i) => timeline.appendChild(row(s, i)));
+
+      paintNums(list);
+      syncLiveSignals(list);
 
       $("raw").textContent = (raw.data || [])
-        .map((e) => `#${e.id} ${e.receivedAt}\n${String(e.payload).slice(0, 800)}`)
+        .map((e) => `#${e.id} ${e.receivedAt}\n${String(e.payload).slice(0, 500)}`)
         .join("\n\n---\n\n") || "(sem raw — giros vêm da API oficial)";
     }
 
-    $("save-rules").onclick = async () => {
-      await fetch("/api/rules", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          whiteGap: { enabled: $("r-white-on").checked, threshold: Number($("r-white-n").value) },
-          sameColorStreak: { enabled: $("r-streak-on").checked, threshold: Number($("r-streak-n").value) },
-          cooldownSeconds: Number($("r-cd").value),
-        }),
+    $("sim-run").onclick = () => {
+      if (!lastSpins.length) {
+        alert("Sem histórico para simular.");
+        return;
+      }
+      const res = runSimulation(lastSpins, {
+        bank: $("sim-bank").value,
+        stake: $("sim-stake").value,
+        strategy: $("sim-strategy").value,
+        maxMg: $("sim-maxmg").value,
       });
-      await refresh();
+      $("sim-final").textContent = fmtMoney(res.final);
+      $("sim-final").className = res.pnl >= 0 ? "pos" : "neg";
+      $("sim-pnl").textContent = fmtMoney(res.pnl);
+      $("sim-pnl").className = res.pnl >= 0 ? "pos" : "neg";
+      $("sim-wins").textContent = `${res.wins}/${res.played} (${res.skipped} sem sinal)`;
+      $("sim-dd").textContent = fmtMoney(res.maxDd);
+    };
+
+    $("reset-trades").onclick = () => {
+      if (!confirm("Zerar placar WIN/LOSS e sinal em aberto?")) return;
+      saveLedger([]);
+      savePending(null);
+      paintTrades([], null);
+      paintSignal(computeSignal(lastSpins));
     };
 
     $("reset").onclick = async () => {
-      if (!confirm("Limpar histórico local de giros?")) return;
+      if (!confirm("Limpar histórico de giros no storage atual?")) return;
       await fetch("/api/reset", { method: "POST" });
       await refresh();
     };
 
     $("refresh").onclick = refresh;
-    loadRulesIntoForm().then(refresh);
+    refresh();
     setInterval(refresh, 2500);
   </script>
 </body>
